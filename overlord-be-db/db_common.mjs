@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +24,8 @@ export const DEFAULTS = {
   postgresVersion: '17.9',
   postgresBuild: '2',
   postgresZipUrl: 'https://get.enterprisedb.com/postgresql/postgresql-17.9-2-windows-x64-binaries.zip',
-  postgresZipFileName: 'postgresql-17.9-2-windows-x64-binaries.zip'
+  postgresZipFileName: 'postgresql-17.9-2-windows-x64-binaries.zip',
+  taskName: '\\p2p-overlord\\overlord-be-postgres-start'
 };
 
 export const PATHS = {
@@ -36,6 +37,7 @@ export const PATHS = {
   logFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.log'),
   pidFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.pid'),
   downloadArchive: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'downloads', DEFAULTS.postgresZipFileName),
+  taskXmlFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres-start-task.xml'),
   coordinatorDir: path.resolve(__dirname, '..', 'overlord-be-coordinator'),
   coordinatorEnvFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', '.env'),
   prismaSchemaFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', 'prisma', 'schema.prisma'),
@@ -94,6 +96,29 @@ export function parseFlagSet(argv) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+export function getCurrentWindowsUser() {
+  const username = process.env.USERNAME?.trim();
+  if (!username) {
+    fail('Unable to determine the current Windows username from the environment.');
+  }
+
+  const domain = process.env.USERDOMAIN?.trim();
+  return domain ? `${domain}\\${username}` : username;
 }
 
 export function spawnOrThrow(command, args, options = {}) {
@@ -220,6 +245,18 @@ export async function waitForTcpConnection({ host = DEFAULTS.host, port = DEFAUL
   return false;
 }
 
+export async function waitForTcpClosed({ host = DEFAULTS.host, port = DEFAULTS.port, timeoutMs = 15000, pollMs = 250 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isPortOpen(host, port, Math.min(pollMs, 1000)))) {
+      return true;
+    }
+    await sleep(pollMs);
+  }
+
+  return false;
+}
+
 export async function waitForPostgresReady({ timeoutMs = 15000, pollMs = 250 } = {}) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -241,6 +278,27 @@ export async function waitForPostgresReady({ timeoutMs = 15000, pollMs = 250 } =
   return false;
 }
 
+export function waitForPostgresReadySync({ timeoutMs = 15000, pollMs = 250 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const result = spawnAllowFailure(
+      getBinaryPath('pg_isready.exe'),
+      ['-h', DEFAULTS.host, '-p', `${DEFAULTS.port}`, '-U', DEFAULTS.user, '-d', 'postgres'],
+      {
+        env: prismaEnv()
+      }
+    );
+
+    if (result.status === 0) {
+      return true;
+    }
+
+    sleepSync(pollMs);
+  }
+
+  return false;
+}
+
 export async function assertPortAvailableForManagedInstance() {
   const portOpen = await isPortOpen();
   if (!portOpen) {
@@ -253,6 +311,77 @@ export async function assertPortAvailableForManagedInstance() {
   }
 
   fail(`Port ${DEFAULTS.port} on ${DEFAULTS.host} is already in use by another process.`);
+}
+
+export function buildScheduledTaskXml() {
+  const currentUser = escapeXml(getCurrentWindowsUser());
+  const nodePath = escapeXml(process.execPath);
+  const helperPath = escapeXml(path.join(PATHS.helperDir, 'db_run.mjs'));
+  const workingDir = escapeXml(PATHS.helperDir);
+
+  return `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>${currentUser}</Author>
+    <Description>Starts local portable PostgreSQL for p2p-overlord on demand.</Description>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>${currentUser}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>true</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>${nodePath}</Command>
+      <Arguments>&quot;${helperPath}&quot; task-start</Arguments>
+      <WorkingDirectory>${workingDir}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>`;
+}
+
+export function ensureScheduledTask() {
+  ensureRuntimeLayout();
+  const taskXml = buildScheduledTaskXml();
+  writeFileSync(PATHS.taskXmlFile, `\uFEFF${taskXml}`, 'utf16le');
+  spawnOrThrow('schtasks.exe', ['/Create', '/XML', PATHS.taskXmlFile, '/TN', DEFAULTS.taskName, '/F'], {
+    env: prismaEnv()
+  });
+}
+
+export function runScheduledTask() {
+  const result = spawnAllowFailure('schtasks.exe', ['/Run', '/TN', DEFAULTS.taskName], {
+    env: prismaEnv()
+  });
+
+  if (result.status === 0) {
+    return result;
+  }
+
+  const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+  if (output.includes('already running') || output.includes('0x41301')) {
+    return result;
+  }
+
+  const details = output.trim();
+  fail(`Failed to run scheduled task ${DEFAULTS.taskName}.${details ? `${os.EOL}${details}` : ''}`);
 }
 
 export function findPostgresHome() {
@@ -537,30 +666,14 @@ export async function startManagedInstance() {
   }
 
   if (await isPortOpen()) {
-    fail(`Port ${DEFAULTS.port} on ${DEFAULTS.host} is already in use by another process.`);
+    const closed = await waitForTcpClosed({ timeoutMs: 10000 });
+    if (!closed) {
+      fail(`Port ${DEFAULTS.port} on ${DEFAULTS.host} is already in use by another process.`);
+    }
   }
 
-  mkdirSync(PATHS.runtimeDir, { recursive: true });
-
-  const child = spawn(
-    getBinaryPath('pg_ctl.exe'),
-    [
-      'start',
-      '-D',
-      PATHS.dataDir,
-      '-l',
-      PATHS.logFile,
-      '-o',
-      `-h ${DEFAULTS.listenHost} -p ${DEFAULTS.port}`
-    ],
-    {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-      env: prismaEnv()
-    }
-  );
-  child.unref();
+  ensureScheduledTask();
+  runScheduledTask();
 
   const postgresReady = await waitForPostgresReady();
   if (!postgresReady) {
@@ -572,6 +685,68 @@ export async function startManagedInstance() {
 
   writeRuntimePidFile();
   return await getManagedStatus();
+}
+
+export async function runTaskStartAction() {
+  if (!isClusterInitialized()) {
+    fail(`PostgreSQL data directory is not initialized at ${PATHS.dataDir}. Run db_setup.mjs first.`);
+  }
+
+  const alreadyReady = spawnAllowFailure(
+    getBinaryPath('pg_isready.exe'),
+    ['-h', DEFAULTS.host, '-p', `${DEFAULTS.port}`, '-U', DEFAULTS.user, '-d', 'postgres'],
+    {
+      env: prismaEnv()
+    }
+  );
+
+  if (alreadyReady.status === 0) {
+    const pid = writeRuntimePidFile();
+    return {
+      installed: true,
+      initialized: true,
+      running: true,
+      responsive: true,
+      appDatabaseExists: false,
+      pid,
+      portOpen: true
+    };
+  }
+
+  spawnOrThrow(
+    getBinaryPath('pg_ctl.exe'),
+    [
+      'start',
+      '-D',
+      PATHS.dataDir,
+      '-l',
+      PATHS.logFile,
+      '-o',
+      `-h ${DEFAULTS.listenHost} -p ${DEFAULTS.port}`
+    ],
+    {
+      env: prismaEnv()
+    }
+  );
+
+  const postgresReady = waitForPostgresReadySync();
+  if (!postgresReady) {
+    const logTail = readLogTail();
+    fail(
+      `Managed PostgreSQL task started but did not become ready for client connections on ${DEFAULTS.host}:${DEFAULTS.port}.${logTail ? `${os.EOL}${logTail}` : ''}`
+    );
+  }
+
+  const pid = writeRuntimePidFile();
+  return {
+    installed: true,
+    initialized: true,
+    running: true,
+    responsive: true,
+    appDatabaseExists: false,
+    pid,
+    portOpen: true
+  };
 }
 
 export async function stopManagedInstance() {
@@ -593,6 +768,11 @@ export async function stopManagedInstance() {
       env: prismaEnv()
     }
   );
+
+  const closed = await waitForTcpClosed({ timeoutMs: 10000 });
+  if (!closed) {
+    fail(`Managed PostgreSQL stopped responding to pg_ctl but ${DEFAULTS.host}:${DEFAULTS.port} is still open.`);
+  }
 
   cleanupRuntimePidFileIfStale();
   unlinkIfPresent(PATHS.pidFile);
