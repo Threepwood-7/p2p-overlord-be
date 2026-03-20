@@ -36,7 +36,7 @@ async function main() {
   const forceEnv = flags.has('--force-env');
   const resetData = flags.has('--reset-data');
   const skipMigrate = flags.has('--skip-migrate');
-  const keepRunning = flags.has('--start');
+  const keepRunning = !flags.has('--stop');
 
   if (resetData) {
     const status = await getManagedStatus();
