@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { closeSync, createWriteStream, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { copyFile, rename, stat } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
@@ -689,24 +689,24 @@ export async function runTaskStartAction() {
     };
   }
 
-  mkdirSync(PATHS.runtimeDir, { recursive: true });
-  const logFd = openSync(PATHS.logFile, 'a');
-
-  try {
-    const child = spawn(
-      getBinaryPath('postgres.exe'),
-      ['-D', PATHS.dataDir, '-h', DEFAULTS.listenHost, '-p', `${DEFAULTS.port}`],
-      {
-        detached: true,
-        stdio: ['ignore', logFd, logFd],
-        windowsHide: true,
-        env: prismaEnv()
-      }
-    );
-    child.unref();
-  } finally {
-    closeSync(logFd);
-  }
+  const starter = spawn(
+    getBinaryPath('pg_ctl.exe'),
+    [
+      'start',
+      '-D',
+      PATHS.dataDir,
+      '-l',
+      PATHS.logFile,
+      '-o',
+      `-h ${DEFAULTS.listenHost} -p ${DEFAULTS.port}`
+    ],
+    {
+      stdio: 'ignore',
+      windowsHide: true,
+      env: prismaEnv()
+    }
+  );
+  starter.unref();
 
   const postgresReady = await waitForPostgresReady();
   if (!postgresReady) {
