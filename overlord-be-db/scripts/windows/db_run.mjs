@@ -46,7 +46,7 @@ async function main() {
 
   const command = process.argv[2];
   if (!command || !['start', 'stop', 'restart', 'status', 'task-start'].includes(command)) {
-    log('Usage: node overlord-be/overlord-be-db/db_run.mjs start|stop|restart|status|task-start');
+    log('Usage: node overlord-be/overlord-be-db/scripts/windows/db_run.mjs start|stop|restart|status|task-start');
     process.exitCode = 1;
     return;
   }

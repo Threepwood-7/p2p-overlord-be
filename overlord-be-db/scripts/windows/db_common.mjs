@@ -39,10 +39,10 @@ export const PATHS = {
   pidFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.pid'),
   downloadArchive: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'downloads', DEFAULTS.postgresZipFileName),
   taskXmlFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres-start-task.xml'),
-  coordinatorDir: path.resolve(__dirname, '..', 'overlord-be-coordinator'),
-  coordinatorEnvFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', '.env'),
-  prismaSchemaFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', 'prisma', 'schema.prisma'),
-  prismaCliFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', 'node_modules', 'prisma', 'build', 'index.js')
+  coordinatorDir: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator'),
+  coordinatorEnvFile: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator', '.env'),
+  prismaSchemaFile: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator', 'prisma', 'schema.prisma'),
+  prismaCliFile: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator', 'node_modules', 'prisma', 'build', 'index.js')
 };
 
 const REQUIRED_BINARIES = [
