@@ -6,6 +6,7 @@ import {
   assertWindows,
   configurePostgresForLocalOnly,
   downloadFile,
+  ensureWindowsFirewallRule,
   ensureCoordinatorDependencies,
   ensureDatabaseExists,
   ensureRuntimeLayout,
@@ -70,6 +71,9 @@ async function main() {
   } else {
     configurePostgresForLocalOnly();
   }
+
+  log('Ensuring Windows Firewall rule exists');
+  ensureWindowsFirewallRule();
 
   writeCoordinatorEnv({ forceEnv });
 

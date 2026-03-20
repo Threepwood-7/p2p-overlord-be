@@ -25,7 +25,8 @@ export const DEFAULTS = {
   postgresBuild: '2',
   postgresZipUrl: 'https://get.enterprisedb.com/postgresql/postgresql-17.9-2-windows-x64-binaries.zip',
   postgresZipFileName: 'postgresql-17.9-2-windows-x64-binaries.zip',
-  taskName: '\\p2p-overlord\\overlord-be-postgres-start'
+  taskName: '\\p2p-overlord\\overlord-be-postgres-start',
+  firewallRuleName: 'p2p-overlord PostgreSQL 5432'
 };
 
 export const PATHS = {
@@ -105,6 +106,10 @@ function escapeXml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function escapePowerShellSingleQuoted(value) {
+  return String(value).replace(/'/g, "''");
 }
 
 export function getCurrentWindowsUser() {
@@ -450,6 +455,29 @@ export function extractArchive(archivePath) {
   mkdirSync(PATHS.postgresInstallDir, { recursive: true });
   spawnOrThrow('tar', ['-xf', archivePath, '-C', PATHS.postgresInstallDir]);
   spawnOrThrow('powershell', ['-Command', `Get-ChildItem -Path '${PATHS.postgresInstallDir}' -Recurse | Unblock-File`]);
+}
+
+export function ensureWindowsFirewallRule() {
+  const postgresBinary = getBinaryPath('postgres.exe');
+  const command = [
+    "$ErrorActionPreference = 'Stop'",
+    `$ruleName = '${escapePowerShellSingleQuoted(DEFAULTS.firewallRuleName)}'`,
+    `$programPath = '${escapePowerShellSingleQuoted(postgresBinary)}'`,
+    '$existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue',
+    'if ($existing) { Remove-NetFirewallRule -DisplayName $ruleName }',
+    `New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Action Allow -Profile Any -Protocol TCP -LocalPort ${DEFAULTS.port} -Program $programPath | Out-Null`
+  ].join('; ');
+
+  const result = spawnAllowFailure('powershell', ['-Command', command], {
+    env: prismaEnv()
+  });
+
+  if (result.status !== 0) {
+    const details = [result.stdout?.trim(), result.stderr?.trim()].filter(Boolean).join(os.EOL);
+    fail(
+      `Failed to create Windows Firewall rule "${DEFAULTS.firewallRuleName}" for TCP ${DEFAULTS.port}.${details ? `${os.EOL}${details}` : ''}`
+    );
+  }
 }
 
 export function writeCoordinatorEnv({ forceEnv = false } = {}) {
