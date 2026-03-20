@@ -1,4 +1,6 @@
 import type {
+	AgentInterfaceReport,
+	AgentInterfaceSelection,
 	FileRecord,
 	IndexerRegistration,
 	PopularHash,
@@ -21,6 +23,9 @@ type AggregatedFile = FileRecord & {
 
 type CoordinatorState = {
 	registrations: Map<string, IndexerRegistration>;
+	agentInterfaceReports: Map<string, AgentInterfaceReport | null>;
+	agentInterfaceSelections: Map<string, AgentInterfaceSelection>;
+	agentInterfaceErrors: Map<string, string | null>;
 	searchJobs: Map<string, SearchDispatch>;
 	snoopEntries: Map<string, SnoopEntry[]>;
 	filesByHash: Map<string, AggregatedFile>;
@@ -36,6 +41,9 @@ declare global {
 function createState(): CoordinatorState {
 	return {
 		registrations: new Map(),
+		agentInterfaceReports: new Map(),
+		agentInterfaceSelections: new Map(),
+		agentInterfaceErrors: new Map(),
 		searchJobs: new Map(),
 		snoopEntries: new Map(),
 		filesByHash: new Map(),
@@ -53,14 +61,36 @@ export function registerIndexer(payload: RegisterRequest): IndexerRegistration {
 		...payload,
 		registered_at: new Date().toISOString()
 	};
+	const existingSelection = coordinatorState.agentInterfaceSelections.get(payload.indexer_id) ?? {
+		selected_interface_name: null,
+		bind_ip: null,
+		selection_confirmed: false
+	};
+	const existingReport = coordinatorState.agentInterfaceReports.get(payload.indexer_id) ?? null;
+	const existingError = coordinatorState.agentInterfaceErrors.get(payload.indexer_id) ?? null;
 	coordinatorState.registrations.set(payload.indexer_id, registered);
+	coordinatorState.agentInterfaceSelections.set(payload.indexer_id, existingSelection);
+	coordinatorState.agentInterfaceReports.set(payload.indexer_id, existingReport);
+	coordinatorState.agentInterfaceErrors.set(payload.indexer_id, existingError);
 	return registered;
 }
 
-export function getIndexersByProtocol(protocol: RegisterRequest['protocol']): IndexerRegistration[] {
+export function getReadyIndexersByProtocol(
+	protocol: RegisterRequest['protocol']
+): IndexerRegistration[] {
 	return Array.from(coordinatorState.registrations.values()).filter(
-		(entry) => entry.protocol === protocol
+		(entry) =>
+			entry.protocol === protocol &&
+			coordinatorState.agentInterfaceReports.get(entry.indexer_id)?.state === 'applied'
 	);
+}
+
+export function listRegistrations(): IndexerRegistration[] {
+	return Array.from(coordinatorState.registrations.values());
+}
+
+export function getRegistration(indexerId: string): IndexerRegistration | undefined {
+	return coordinatorState.registrations.get(indexerId);
 }
 
 export function storeSearchJob(job: SearchJob, dispatched_to: string[]): void {
@@ -108,6 +138,53 @@ export function storeSnoopEntries(indexerId: string, entries: SnoopEntry[]): voi
 
 export function restoreSnoopEntries(indexerId: string): SnoopEntry[] {
 	return coordinatorState.snoopEntries.get(indexerId) ?? [];
+}
+
+export function storeAgentInterfaceReport(indexerId: string, report: AgentInterfaceReport): void {
+	coordinatorState.agentInterfaceReports.set(indexerId, report);
+	coordinatorState.agentInterfaceErrors.set(indexerId, report.last_error ?? null);
+}
+
+export function storeAgentInterfaceError(indexerId: string, error: string): void {
+	coordinatorState.agentInterfaceErrors.set(indexerId, error);
+}
+
+export function updateAgentInterfaceSelection(
+	indexerId: string,
+	selection: AgentInterfaceSelection
+): void {
+	coordinatorState.agentInterfaceSelections.set(indexerId, selection);
+}
+
+export function getAgentInterfaceSelection(indexerId: string): AgentInterfaceSelection {
+	return (
+		coordinatorState.agentInterfaceSelections.get(indexerId) ?? {
+			selected_interface_name: null,
+			bind_ip: null,
+			selection_confirmed: false
+		}
+	);
+}
+
+export function getAgentInterfaceReport(indexerId: string): AgentInterfaceReport | null {
+	return coordinatorState.agentInterfaceReports.get(indexerId) ?? null;
+}
+
+export function getAgentInterfaceError(indexerId: string): string | null {
+	return coordinatorState.agentInterfaceErrors.get(indexerId) ?? null;
+}
+
+export function getAgentInterfaceState() {
+	return coordinatorState.agentInterfaceReports;
+}
+
+export function listAgentDashboard() {
+	return Array.from(coordinatorState.registrations.values()).map((registration) => ({
+		registration,
+		interface_report: getAgentInterfaceReport(registration.indexer_id),
+		selection: getAgentInterfaceSelection(registration.indexer_id),
+		last_error: getAgentInterfaceError(registration.indexer_id)
+	}));
 }
 
 export function snapshotStatus() {

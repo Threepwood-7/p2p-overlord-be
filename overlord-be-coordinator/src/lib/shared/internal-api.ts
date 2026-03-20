@@ -46,6 +46,65 @@ export type ResultBatch = {
 	files: FileRecord[];
 };
 
+export type InterfaceAddressFamily = 'ipv4' | 'ipv6';
+
+export type AgentInterfaceAddress = {
+	family: InterfaceAddressFamily;
+	address: string;
+};
+
+export type AgentInterface = {
+	name: string;
+	description: string | null;
+	addresses: AgentInterfaceAddress[];
+	is_loopback: boolean;
+	is_vpn_candidate: boolean;
+	has_default_route: boolean;
+};
+
+export type InterfaceSelectionState = 'pending' | 'confirmed' | 'applied' | 'error';
+
+export type AgentInterfaceReport = {
+	interfaces: AgentInterface[];
+	recommended_interface_name: string | null;
+	selected_interface_name: string | null;
+	resolved_bind_ip: string | null;
+	selection_confirmed: boolean;
+	networking_ready: boolean;
+	state: InterfaceSelectionState;
+	last_error: string | null;
+};
+
+export type SelectedGateway = {
+	backend: string;
+	control_url: string;
+	local_addr: string | null;
+	gateway_addr: string | null;
+	external_ip: string | null;
+};
+
+export type MappedEndpoint = {
+	name: string;
+	protocol: 'tcp' | 'udp';
+	local_addr: string;
+	external_addr: string;
+	lease_expires_in_secs: number;
+	backend: string;
+};
+
+export type NatStatusSnapshot = {
+	enabled: boolean;
+	gateway_discovered: boolean;
+	backend: string | null;
+	bind_ip: string | null;
+	igd_ip: string | null;
+	gateway: SelectedGateway | null;
+	mappings: MappedEndpoint[];
+	observed_external_addresses: string[];
+	last_refresh_unix_secs: number | null;
+	last_error: string | null;
+};
+
 export type IndexerStats = {
 	indexer_id: string;
 	protocol: Protocol;
@@ -54,6 +113,8 @@ export type IndexerStats = {
 	snoop_queue_depth: number;
 	staging_queue_depth: number;
 	uptime_secs: number;
+	nat: NatStatusSnapshot | null;
+	interface_report: AgentInterfaceReport | null;
 };
 
 export type ConfigUpdate = {
@@ -86,4 +147,10 @@ export type RegisterRequest = {
 
 export type IndexerRegistration = RegisterRequest & {
 	registered_at: string;
+};
+
+export type AgentInterfaceSelection = {
+	selected_interface_name: string | null;
+	bind_ip: string | null;
+	selection_confirmed: boolean;
 };

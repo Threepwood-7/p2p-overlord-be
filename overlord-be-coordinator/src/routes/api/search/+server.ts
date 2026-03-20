@@ -1,7 +1,8 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 import type { SearchJob } from '$lib/shared/internal-api';
-import { getIndexersByProtocol, storeSearchJob } from '$lib/server/state';
+import { refreshAllAgentInterfaces } from '$lib/server/agent-control';
+import { getReadyIndexersByProtocol, storeSearchJob } from '$lib/server/state';
 
 export const POST: RequestHandler = async ({ request, url, fetch }) => {
 	const payload = (await request.json()) as { query?: string; protocol?: 'kad2' };
@@ -11,9 +12,10 @@ export const POST: RequestHandler = async ({ request, url, fetch }) => {
 	}
 
 	const protocol = payload.protocol ?? 'kad2';
-	const agents = getIndexersByProtocol(protocol);
+	await refreshAllAgentInterfaces();
+	const agents = getReadyIndexersByProtocol(protocol);
 	if (agents.length === 0) {
-		return json({ error: `no registered ${protocol} agents` }, { status: 503 });
+		return json({ error: `no ready ${protocol} agents` }, { status: 503 });
 	}
 
 	const job: SearchJob = {

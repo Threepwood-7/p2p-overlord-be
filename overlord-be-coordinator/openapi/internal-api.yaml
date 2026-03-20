@@ -3,7 +3,7 @@ info:
   title: overlord-be-coordinator internal api
   version: 0.1.0
 servers:
-  - url: http://localhost:13300
+  - url: http://127.0.0.1:13300
 paths:
   /api/internal/register:
     post:
@@ -89,6 +89,59 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PopularHash'
+  /api/agents/{indexer_id}/interfaces:
+    get:
+      operationId: getAgentInterfaces
+      parameters:
+        - name: indexer_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current coordinator-side interface view for the agent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registration, report, selection, last_error]
+                properties:
+                  registration:
+                    $ref: '#/components/schemas/IndexerRegistration'
+                  report:
+                    allOf:
+                      - $ref: '#/components/schemas/AgentInterfaceReport'
+                    nullable: true
+                  selection:
+                    $ref: '#/components/schemas/AgentInterfaceSelection'
+                  last_error:
+                    type: string
+                    nullable: true
+  /api/agents/{indexer_id}/interface-selection:
+    post:
+      operationId: applyAgentInterfaceSelection
+      parameters:
+        - name: indexer_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentInterfaceSelection'
+      responses:
+        '200':
+          description: Refreshed interface report after applying selection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentInterfaceReport'
 components:
   schemas:
     Protocol:
@@ -178,6 +231,158 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FileRecord'
+    InterfaceAddressFamily:
+      type: string
+      enum: [ipv4, ipv6]
+    AgentInterfaceAddress:
+      type: object
+      required: [family, address]
+      properties:
+        family:
+          $ref: '#/components/schemas/InterfaceAddressFamily'
+        address:
+          type: string
+    AgentInterface:
+      type: object
+      required:
+        [name, description, addresses, is_loopback, is_vpn_candidate, has_default_route]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInterfaceAddress'
+        is_loopback:
+          type: boolean
+        is_vpn_candidate:
+          type: boolean
+        has_default_route:
+          type: boolean
+    InterfaceSelectionState:
+      type: string
+      enum: [pending, confirmed, applied, error]
+    AgentInterfaceReport:
+      type: object
+      required:
+        [
+          interfaces,
+          recommended_interface_name,
+          selected_interface_name,
+          resolved_bind_ip,
+          selection_confirmed,
+          networking_ready,
+          state,
+          last_error
+        ]
+      properties:
+        interfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInterface'
+        recommended_interface_name:
+          type: string
+          nullable: true
+        selected_interface_name:
+          type: string
+          nullable: true
+        resolved_bind_ip:
+          type: string
+          nullable: true
+        selection_confirmed:
+          type: boolean
+        networking_ready:
+          type: boolean
+        state:
+          $ref: '#/components/schemas/InterfaceSelectionState'
+        last_error:
+          type: string
+          nullable: true
+    SelectedGateway:
+      type: object
+      required: [backend, control_url, local_addr, gateway_addr, external_ip]
+      properties:
+        backend:
+          type: string
+        control_url:
+          type: string
+        local_addr:
+          type: string
+          nullable: true
+        gateway_addr:
+          type: string
+          nullable: true
+        external_ip:
+          type: string
+          nullable: true
+    MappedEndpoint:
+      type: object
+      required:
+        [name, protocol, local_addr, external_addr, lease_expires_in_secs, backend]
+      properties:
+        name:
+          type: string
+        protocol:
+          type: string
+          enum: [tcp, udp]
+        local_addr:
+          type: string
+        external_addr:
+          type: string
+        lease_expires_in_secs:
+          type: integer
+        backend:
+          type: string
+    NatStatusSnapshot:
+      type: object
+      required:
+        [
+          enabled,
+          gateway_discovered,
+          backend,
+          bind_ip,
+          igd_ip,
+          gateway,
+          mappings,
+          observed_external_addresses,
+          last_refresh_unix_secs,
+          last_error
+        ]
+      properties:
+        enabled:
+          type: boolean
+        gateway_discovered:
+          type: boolean
+        backend:
+          type: string
+          nullable: true
+        bind_ip:
+          type: string
+          nullable: true
+        igd_ip:
+          type: string
+          nullable: true
+        gateway:
+          allOf:
+            - $ref: '#/components/schemas/SelectedGateway'
+          nullable: true
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/MappedEndpoint'
+        observed_external_addresses:
+          type: array
+          items:
+            type: string
+        last_refresh_unix_secs:
+          type: integer
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
     IndexerStats:
       type: object
       required:
@@ -188,7 +393,9 @@ components:
           crawl_rate,
           snoop_queue_depth,
           staging_queue_depth,
-          uptime_secs
+          uptime_secs,
+          nat,
+          interface_report
         ]
       properties:
         indexer_id:
@@ -207,6 +414,14 @@ components:
         uptime_secs:
           type: integer
           format: int64
+        nat:
+          allOf:
+            - $ref: '#/components/schemas/NatStatusSnapshot'
+          nullable: true
+        interface_report:
+          allOf:
+            - $ref: '#/components/schemas/AgentInterfaceReport'
+          nullable: true
     ConfigUpdate:
       type: object
       required: [protocol, config]
@@ -269,3 +484,15 @@ components:
             registered_at:
               type: string
               format: date-time
+    AgentInterfaceSelection:
+      type: object
+      required: [selected_interface_name, bind_ip, selection_confirmed]
+      properties:
+        selected_interface_name:
+          type: string
+          nullable: true
+        bind_ip:
+          type: string
+          nullable: true
+        selection_confirmed:
+          type: boolean

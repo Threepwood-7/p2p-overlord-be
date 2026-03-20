@@ -1,7 +1,10 @@
-import { snapshotStatus } from '$lib/server/state';
+import { refreshAllAgentInterfaces } from '$lib/server/agent-control';
+import { listAgentDashboard, snapshotStatus } from '$lib/server/state';
 
-export function load() {
+export async function load() {
+	await refreshAllAgentInterfaces();
 	return {
-		status: snapshotStatus()
+		status: snapshotStatus(),
+		agents: listAgentDashboard()
 	};
 }
