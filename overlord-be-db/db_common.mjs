@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,13 +29,13 @@ export const DEFAULTS = {
 
 export const PATHS = {
   helperDir: __dirname,
-  runtimeDir: path.join(__dirname, 'runtime'),
-  downloadsDir: path.join(__dirname, 'runtime', 'downloads'),
-  postgresInstallDir: path.join(__dirname, 'runtime', 'postgres'),
-  dataDir: path.join(__dirname, 'runtime', 'data'),
-  logFile: path.join(__dirname, 'runtime', 'postgres.log'),
-  pidFile: path.join(__dirname, 'runtime', 'postgres.pid'),
-  downloadArchive: path.join(__dirname, 'runtime', 'downloads', DEFAULTS.postgresZipFileName),
+  runtimeDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime'),
+  downloadsDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'downloads'),
+  postgresInstallDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres'),
+  dataDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'data'),
+  logFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.log'),
+  pidFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.pid'),
+  downloadArchive: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'downloads', DEFAULTS.postgresZipFileName),
   coordinatorDir: path.resolve(__dirname, '..', 'overlord-be-coordinator'),
   coordinatorEnvFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', '.env'),
   prismaSchemaFile: path.resolve(__dirname, '..', 'overlord-be-coordinator', 'prisma', 'schema.prisma'),
@@ -542,7 +542,7 @@ export async function startManagedInstance() {
 
   mkdirSync(PATHS.runtimeDir, { recursive: true });
 
-  spawnOrThrow(
+  const child = spawn(
     getBinaryPath('pg_ctl.exe'),
     [
       'start',
@@ -554,9 +554,13 @@ export async function startManagedInstance() {
       `-h ${DEFAULTS.listenHost} -p ${DEFAULTS.port}`
     ],
     {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
       env: prismaEnv()
     }
   );
+  child.unref();
 
   const postgresReady = await waitForPostgresReady();
   if (!postgresReady) {
@@ -682,6 +686,7 @@ export function formatStatus(status) {
     `responsive: ${status.responsive ? 'yes' : 'no'}`,
     `app_database_exists: ${status.appDatabaseExists ? 'yes' : 'no'}`,
     `pid: ${status.pid ?? 'n/a'}`,
+    `runtime_dir: ${PATHS.runtimeDir}`,
     `connect_host: ${DEFAULTS.host}:${DEFAULTS.port}`,
     `listen_host: ${DEFAULTS.listenHost}:${DEFAULTS.port}`,
     `database_url: ${DEFAULTS.databaseUrl}`
