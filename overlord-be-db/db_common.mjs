@@ -550,7 +550,6 @@ export async function startManagedInstance() {
       PATHS.dataDir,
       '-l',
       PATHS.logFile,
-      '-w',
       '-o',
       `-h ${DEFAULTS.listenHost} -p ${DEFAULTS.port}`
     ],
