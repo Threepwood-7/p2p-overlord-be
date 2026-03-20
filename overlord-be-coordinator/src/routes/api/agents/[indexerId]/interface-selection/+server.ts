@@ -1,6 +1,11 @@
 import { json, redirect, type RequestHandler } from '@sveltejs/kit';
 
-import type { AgentNetworkSelections, InterfaceBindingSelection, Protocol } from '$lib/shared/internal-api';
+import type {
+	AgentNatConfig,
+	AgentNetworkingConfig,
+	InterfaceBindingSelection,
+	Protocol
+} from '$lib/shared/internal-api';
 import { applyAgentInterfaceSelection } from '$lib/server/agent-control';
 import { getRegistration } from '$lib/server/state';
 
@@ -17,9 +22,9 @@ function normalizeOptionalString(value: FormDataEntryValue | null): string | nul
 async function applySelection(
 	indexerId: string,
 	protocol: Protocol,
-	selection: AgentNetworkSelections
+	config: AgentNetworkingConfig
 ) {
-	const report = await applyAgentInterfaceSelection(indexerId, protocol, selection);
+	const report = await applyAgentInterfaceSelection(indexerId, protocol, config);
 	return json(report);
 }
 
@@ -41,6 +46,16 @@ function parseBindingSelection(form: FormData, prefix: string): InterfaceBinding
 	};
 }
 
+function parseNatConfig(form: FormData): AgentNatConfig {
+	const backend = normalizeOptionalString(form.get('nat_backend'));
+	return {
+		enabled: form.get('nat_enabled') === 'on',
+		backend_order: backend ? [backend] : ['upnp'],
+		igd_ip: normalizeOptionalString(form.get('nat_igd_ip')),
+		external_ip_override: normalizeOptionalString(form.get('nat_external_ip_override'))
+	};
+}
+
 export const POST: RequestHandler = async ({ params, request }) => {
 	const indexerId = params.indexerId;
 	if (!indexerId) {
@@ -52,17 +67,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	}
 
 	const contentType = request.headers.get('content-type') ?? '';
-	let selection: AgentNetworkSelections;
+	let config: AgentNetworkingConfig;
 	if (contentType.includes('application/json')) {
-		selection = (await request.json()) as AgentNetworkSelections;
-		return applySelection(indexerId, registration.protocol, selection);
+		config = (await request.json()) as AgentNetworkingConfig;
+		return applySelection(indexerId, registration.protocol, config);
 	}
 
 	const form = await request.formData();
-	selection = {
+	config = {
 		control: parseBindingSelection(form, 'control'),
-		p2p: parseBindingSelection(form, 'p2p')
+		p2p: parseBindingSelection(form, 'p2p'),
+		nat: parseNatConfig(form)
 	};
-	await applyAgentInterfaceSelection(indexerId, registration.protocol, selection);
+	await applyAgentInterfaceSelection(indexerId, registration.protocol, config);
 	throw redirect(303, '/');
 };

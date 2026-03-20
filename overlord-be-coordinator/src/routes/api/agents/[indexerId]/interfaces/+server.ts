@@ -1,7 +1,12 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 import { refreshAgentInterface } from '$lib/server/agent-control';
-import { getAgentInterfaceError, getAgentInterfaceSelection, getRegistration } from '$lib/server/state';
+import {
+	getAgentInterfaceError,
+	getAgentNatStatus,
+	getAgentNetworkingConfig,
+	getRegistration
+} from '$lib/server/state';
 
 export const GET: RequestHandler = async ({ params }) => {
 	const indexerId = params.indexerId;
@@ -18,7 +23,8 @@ export const GET: RequestHandler = async ({ params }) => {
 		return json({
 			registration,
 			report,
-			selection: getAgentInterfaceSelection(indexerId),
+			config: getAgentNetworkingConfig(indexerId),
+			nat: getAgentNatStatus(indexerId),
 			last_error: getAgentInterfaceError(indexerId)
 		});
 	} catch (error) {
@@ -26,7 +32,8 @@ export const GET: RequestHandler = async ({ params }) => {
 			{
 				registration,
 				report: null,
-				selection: getAgentInterfaceSelection(indexerId),
+				config: getAgentNetworkingConfig(indexerId),
+				nat: getAgentNatStatus(indexerId),
 				last_error: error instanceof Error ? error.message : String(error)
 			},
 			{ status: 502 }

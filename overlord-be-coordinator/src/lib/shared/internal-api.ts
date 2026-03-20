@@ -86,9 +86,17 @@ export type AgentNetworkReport = {
 	p2p: InterfaceBindingReport;
 };
 
-export type AgentNetworkSelections = {
+export type AgentNatConfig = {
+	enabled: boolean;
+	backend_order: string[];
+	igd_ip: string | null;
+	external_ip_override: string | null;
+};
+
+export type AgentNetworkingConfig = {
 	control: InterfaceBindingSelection;
 	p2p: InterfaceBindingSelection;
+	nat: AgentNatConfig;
 };
 
 export type SelectedGateway = {
@@ -114,10 +122,19 @@ export type NatStatusSnapshot = {
 	backend: string | null;
 	bind_ip: string | null;
 	igd_ip: string | null;
+	external_ip_override: string | null;
 	gateway: SelectedGateway | null;
 	mappings: MappedEndpoint[];
 	observed_external_addresses: string[];
 	last_refresh_unix_secs: number | null;
+	last_error: string | null;
+};
+
+export type AgentInterfacesView = {
+	registration: IndexerRegistration;
+	report: AgentNetworkReport | null;
+	config: AgentNetworkingConfig;
+	nat: NatStatusSnapshot | null;
 	last_error: string | null;
 };
 

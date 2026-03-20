@@ -1,9 +1,11 @@
 import type {
 	AgentNetworkReport,
-	AgentNetworkSelections,
+	AgentNatConfig,
+	AgentNetworkingConfig,
 	InterfaceBindingSelection,
 	FileRecord,
 	IndexerRegistration,
+	NatStatusSnapshot,
 	PopularHash,
 	RegisterRequest,
 	ResultBatch,
@@ -25,7 +27,8 @@ type AggregatedFile = FileRecord & {
 type CoordinatorState = {
 	registrations: Map<string, IndexerRegistration>;
 	agentInterfaceReports: Map<string, AgentNetworkReport | null>;
-	agentInterfaceSelections: Map<string, AgentNetworkSelections>;
+	agentNetworkingConfigs: Map<string, AgentNetworkingConfig>;
+	agentNatStatuses: Map<string, NatStatusSnapshot | null>;
 	agentInterfaceErrors: Map<string, string | null>;
 	searchJobs: Map<string, SearchDispatch>;
 	snoopEntries: Map<string, SnoopEntry[]>;
@@ -43,7 +46,8 @@ function createState(): CoordinatorState {
 	return {
 		registrations: new Map(),
 		agentInterfaceReports: new Map(),
-		agentInterfaceSelections: new Map(),
+		agentNetworkingConfigs: new Map(),
+		agentNatStatuses: new Map(),
 		agentInterfaceErrors: new Map(),
 		searchJobs: new Map(),
 		snoopEntries: new Map(),
@@ -62,13 +66,15 @@ export function registerIndexer(payload: RegisterRequest): IndexerRegistration {
 		...payload,
 		registered_at: new Date().toISOString()
 	};
-	const existingSelection =
-		coordinatorState.agentInterfaceSelections.get(payload.indexer_id) ?? createEmptySelections();
+	const existingConfig =
+		coordinatorState.agentNetworkingConfigs.get(payload.indexer_id) ?? createEmptyConfig();
 	const existingReport = coordinatorState.agentInterfaceReports.get(payload.indexer_id) ?? null;
+	const existingNatStatus = coordinatorState.agentNatStatuses.get(payload.indexer_id) ?? null;
 	const existingError = coordinatorState.agentInterfaceErrors.get(payload.indexer_id) ?? null;
 	coordinatorState.registrations.set(payload.indexer_id, registered);
-	coordinatorState.agentInterfaceSelections.set(payload.indexer_id, existingSelection);
+	coordinatorState.agentNetworkingConfigs.set(payload.indexer_id, existingConfig);
 	coordinatorState.agentInterfaceReports.set(payload.indexer_id, existingReport);
+	coordinatorState.agentNatStatuses.set(payload.indexer_id, existingNatStatus);
 	coordinatorState.agentInterfaceErrors.set(payload.indexer_id, existingError);
 	return registered;
 }
@@ -140,25 +146,29 @@ export function restoreSnoopEntries(indexerId: string): SnoopEntry[] {
 
 export function storeAgentInterfaceReport(indexerId: string, report: AgentNetworkReport): void {
 	coordinatorState.agentInterfaceReports.set(indexerId, report);
-	coordinatorState.agentInterfaceErrors.set(
-		indexerId,
-		report.control.last_error ?? report.p2p.last_error ?? null
-	);
+	const natStatus = coordinatorState.agentNatStatuses.get(indexerId) ?? null;
+	coordinatorState.agentInterfaceErrors.set(indexerId, firstNonNullError(report, natStatus));
+}
+
+export function storeAgentNatStatus(indexerId: string, status: NatStatusSnapshot | null): void {
+	coordinatorState.agentNatStatuses.set(indexerId, status);
+	const report = coordinatorState.agentInterfaceReports.get(indexerId) ?? null;
+	coordinatorState.agentInterfaceErrors.set(indexerId, firstNonNullError(report, status));
 }
 
 export function storeAgentInterfaceError(indexerId: string, error: string): void {
 	coordinatorState.agentInterfaceErrors.set(indexerId, error);
 }
 
-export function updateAgentInterfaceSelection(
+export function updateAgentNetworkingConfig(
 	indexerId: string,
-	selection: AgentNetworkSelections
+	config: AgentNetworkingConfig
 ): void {
-	coordinatorState.agentInterfaceSelections.set(indexerId, selection);
+	coordinatorState.agentNetworkingConfigs.set(indexerId, config);
 }
 
-export function getAgentInterfaceSelection(indexerId: string): AgentNetworkSelections {
-	return coordinatorState.agentInterfaceSelections.get(indexerId) ?? createEmptySelections();
+export function getAgentNetworkingConfig(indexerId: string): AgentNetworkingConfig {
+	return coordinatorState.agentNetworkingConfigs.get(indexerId) ?? createEmptyConfig();
 }
 
 export function getAgentInterfaceReport(indexerId: string): AgentNetworkReport | null {
@@ -169,6 +179,10 @@ export function getAgentInterfaceError(indexerId: string): string | null {
 	return coordinatorState.agentInterfaceErrors.get(indexerId) ?? null;
 }
 
+export function getAgentNatStatus(indexerId: string): NatStatusSnapshot | null {
+	return coordinatorState.agentNatStatuses.get(indexerId) ?? null;
+}
+
 export function getAgentInterfaceState() {
 	return coordinatorState.agentInterfaceReports;
 }
@@ -176,8 +190,9 @@ export function getAgentInterfaceState() {
 export function listAgentDashboard() {
 	return Array.from(coordinatorState.registrations.values()).map((registration) => ({
 		registration,
-		interface_report: getAgentInterfaceReport(registration.indexer_id),
-		selection: getAgentInterfaceSelection(registration.indexer_id),
+		report: getAgentInterfaceReport(registration.indexer_id),
+		config: getAgentNetworkingConfig(registration.indexer_id),
+		nat: getAgentNatStatus(registration.indexer_id),
 		last_error: getAgentInterfaceError(registration.indexer_id)
 	}));
 }
@@ -226,9 +241,26 @@ function createEmptyBindingSelection(): InterfaceBindingSelection {
 	};
 }
 
-function createEmptySelections(): AgentNetworkSelections {
+function createDefaultNatConfig(): AgentNatConfig {
+	return {
+		enabled: false,
+		backend_order: ['upnp'],
+		igd_ip: null,
+		external_ip_override: null
+	};
+}
+
+function createEmptyConfig(): AgentNetworkingConfig {
 	return {
 		control: createEmptyBindingSelection(),
-		p2p: createEmptyBindingSelection()
+		p2p: createEmptyBindingSelection(),
+		nat: createDefaultNatConfig()
 	};
+}
+
+function firstNonNullError(
+	report: AgentNetworkReport | null,
+	natStatus: NatStatusSnapshot | null
+): string | null {
+	return report?.control.last_error ?? report?.p2p.last_error ?? natStatus?.last_error ?? null;
 }

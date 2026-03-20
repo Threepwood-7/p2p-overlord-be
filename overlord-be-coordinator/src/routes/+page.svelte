@@ -1,5 +1,18 @@
 <script lang="ts">
+	import type {
+		AgentInterfacesView,
+		InterfaceBindingSelection
+	} from '$lib/shared/internal-api';
+
 	const ANY_BIND_OPTION = '__any__';
+
+	function isAnyBindingOption(binding: InterfaceBindingSelection): boolean {
+		return binding.selected_interface_name === null && binding.bind_ip === '0.0.0.0';
+	}
+
+	function desiredNatBackend(agent: AgentInterfacesView): string {
+		return agent.config.nat.backend_order[0] ?? 'upnp';
+	}
 
 	export let data:
 		| {
@@ -9,19 +22,7 @@
 					file_count: number;
 					result_batches: number;
 				};
-				agents: Array<{
-					registration: {
-						indexer_id: string;
-						protocol: string;
-						url: string;
-						hostname: string;
-						version: string;
-						registered_at: string;
-					};
-					interface_report: import('$lib/shared/internal-api').AgentNetworkReport | null;
-					selection: import('$lib/shared/internal-api').AgentNetworkSelections;
-					last_error: string | null;
-				}>;
+				agents: AgentInterfacesView[];
 		  }
 		| undefined;
 </script>
@@ -44,23 +45,23 @@
 
 		{#if data.agents.length > 0}
 			<section>
-				<h2>Agent Interface Selection</h2>
+				<h2>Agent Networking</h2>
 				{#each data.agents as agent}
 					<article>
 						<h3>{agent.registration.protocol} · {agent.registration.hostname}</h3>
 						<p>{agent.registration.indexer_id}</p>
 						<p>Registered URL: {agent.registration.url}</p>
 						<p>
-							Control: {agent.interface_report?.control.state ?? 'pending'} · ready:
-							{agent.interface_report?.control.ready ? 'yes' : 'no'} · selected:
-							{agent.interface_report?.control.selected_interface_name ?? 'none'} · bind:
-							{agent.interface_report?.control.resolved_bind_ip ?? 'none'}
+							Control: {agent.report?.control.state ?? 'pending'} · ready:
+							{agent.report?.control.ready ? 'yes' : 'no'} · selected:
+							{agent.report?.control.selected_interface_name ?? 'none'} · bind:
+							{agent.report?.control.resolved_bind_ip ?? 'none'}
 						</p>
 						<p>
-							P2P: {agent.interface_report?.p2p.state ?? 'pending'} · ready:
-							{agent.interface_report?.p2p.ready ? 'yes' : 'no'} · selected:
-							{agent.interface_report?.p2p.selected_interface_name ?? 'none'} · bind:
-							{agent.interface_report?.p2p.resolved_bind_ip ?? 'none'}
+							P2P: {agent.report?.p2p.state ?? 'pending'} · ready:
+							{agent.report?.p2p.ready ? 'yes' : 'no'} · selected:
+							{agent.report?.p2p.selected_interface_name ?? 'none'} · bind:
+							{agent.report?.p2p.resolved_bind_ip ?? 'none'}
 						</p>
 						{#if agent.last_error}
 							<p>Error: {agent.last_error}</p>
@@ -76,17 +77,14 @@
 									<option value="">-- choose --</option>
 									<option
 										value={ANY_BIND_OPTION}
-										selected={
-											agent.selection.control.selected_interface_name === null &&
-											agent.selection.control.bind_ip === '0.0.0.0'
-										}
+										selected={isAnyBindingOption(agent.config.control)}
 									>
 										Any (0.0.0.0)
 									</option>
-									{#each agent.interface_report?.interfaces ?? [] as iface}
+									{#each agent.report?.interfaces ?? [] as iface}
 										<option
 											value={iface.name}
-											selected={iface.name === agent.selection.control.selected_interface_name}
+											selected={iface.name === agent.config.control.selected_interface_name}
 										>
 											{iface.name}
 											{#if iface.is_vpn_candidate} (vpn){/if}
@@ -98,14 +96,14 @@
 
 							<label>
 								Control bind IP
-								<input name="control_bind_ip" value={agent.selection.control.bind_ip ?? ''} />
+								<input name="control_bind_ip" value={agent.config.control.bind_ip ?? ''} />
 							</label>
 
 							<label>
 								<input
 									type="checkbox"
 									name="control_selection_confirmed"
-									checked={agent.selection.control.selection_confirmed}
+									checked={agent.config.control.selection_confirmed}
 								/>
 								Control selection confirmed
 							</label>
@@ -116,17 +114,14 @@
 									<option value="">-- choose --</option>
 									<option
 										value={ANY_BIND_OPTION}
-										selected={
-											agent.selection.p2p.selected_interface_name === null &&
-											agent.selection.p2p.bind_ip === '0.0.0.0'
-										}
+										selected={isAnyBindingOption(agent.config.p2p)}
 									>
 										Any (0.0.0.0)
 									</option>
-									{#each agent.interface_report?.interfaces ?? [] as iface}
+									{#each agent.report?.interfaces ?? [] as iface}
 										<option
 											value={iface.name}
-											selected={iface.name === agent.selection.p2p.selected_interface_name}
+											selected={iface.name === agent.config.p2p.selected_interface_name}
 										>
 											{iface.name}
 											{#if iface.is_vpn_candidate} (vpn){/if}
@@ -138,16 +133,59 @@
 
 							<label>
 								P2P bind IP
-								<input name="p2p_bind_ip" value={agent.selection.p2p.bind_ip ?? ''} />
+								<input name="p2p_bind_ip" value={agent.config.p2p.bind_ip ?? ''} />
 							</label>
 
 							<label>
 								<input
 									type="checkbox"
 									name="p2p_selection_confirmed"
-									checked={agent.selection.p2p.selection_confirmed}
+									checked={agent.config.p2p.selection_confirmed}
 								/>
 								P2P selection confirmed
+							</label>
+
+							<p>
+								NAT desired: {agent.config.nat.enabled ? 'enabled' : 'disabled'} · backend:
+								{desiredNatBackend(agent)} · IGD:
+								{agent.config.nat.igd_ip ?? 'auto'} · external IP:
+								{agent.config.nat.external_ip_override ?? 'auto'}
+							</p>
+							<p>
+								NAT live: {agent.nat?.enabled ? 'enabled' : 'disabled'} · backend:
+								{agent.nat?.backend ?? 'none'} · gateway:
+								{agent.nat?.gateway?.gateway_addr ?? 'none'} · external IP:
+								{agent.nat?.gateway?.external_ip ??
+									agent.nat?.observed_external_addresses?.[0] ??
+									'none'}
+							</p>
+							{#if agent.nat?.last_error}
+								<p>NAT error: {agent.nat.last_error}</p>
+							{/if}
+
+							<label>
+								<input type="checkbox" name="nat_enabled" checked={agent.config.nat.enabled} />
+								Enable UPnP/NAT
+							</label>
+
+							<label>
+								NAT backend
+								<select name="nat_backend">
+									<option value="upnp" selected={desiredNatBackend(agent) === 'upnp'}>upnp</option>
+								</select>
+							</label>
+
+							<label>
+								IGD IP override
+								<input name="nat_igd_ip" value={agent.config.nat.igd_ip ?? ''} />
+							</label>
+
+							<label>
+								External IP override
+								<input
+									name="nat_external_ip_override"
+									value={agent.config.nat.external_ip_override ?? ''}
+								/>
 							</label>
 
 							<button type="submit">Apply</button>

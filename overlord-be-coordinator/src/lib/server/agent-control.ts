@@ -1,30 +1,33 @@
 import type {
 	AgentNetworkReport,
-	AgentNetworkSelections,
+	AgentNetworkingConfig,
 	ConfigUpdate,
 	InterfaceBindingReport,
 	InterfaceBindingSelection,
+	IndexerStats,
 	IndexerRegistration,
+	NatStatusSnapshot,
 	Protocol
 } from '$lib/shared/internal-api';
 import {
 	getAgentInterfaceReport,
-	getAgentInterfaceSelection,
+	getAgentNetworkingConfig,
 	getAgentInterfaceState,
 	getRegistration,
 	storeAgentInterfaceError,
 	storeAgentInterfaceReport,
-	updateAgentInterfaceSelection
+	storeAgentNatStatus,
+	updateAgentNetworkingConfig
 } from '$lib/server/state';
 
 const CONTROL_REBIND_WAIT_MESSAGE = 'waiting for agent control rebind';
 
-async function fetchAgentInterfaceReport(agent: IndexerRegistration): Promise<AgentNetworkReport> {
-	const response = await fetch(`${agent.url}/api/internal/interfaces`);
+async function fetchAgentStats(agent: IndexerRegistration): Promise<IndexerStats> {
+	const response = await fetch(`${agent.url}/api/internal/stats`);
 	if (!response.ok) {
-		throw new Error(`agent interface fetch failed with ${response.status}`);
+		throw new Error(`agent stats fetch failed with ${response.status}`);
 	}
-	return (await response.json()) as AgentNetworkReport;
+	return (await response.json()) as IndexerStats;
 }
 
 function bindingSelectionMatchesReport(
@@ -51,28 +54,68 @@ function bindingSelectionMatchesReport(
 }
 
 function selectionMatchesReport(
-	selection: AgentNetworkSelections,
+	config: AgentNetworkingConfig,
 	report: AgentNetworkReport
 ): boolean {
 	return (
-		bindingSelectionMatchesReport(selection.control, report.control) &&
-		bindingSelectionMatchesReport(selection.p2p, report.p2p)
+		bindingSelectionMatchesReport(config.control, report.control) &&
+		bindingSelectionMatchesReport(config.p2p, report.p2p)
 	);
 }
 
 function controlSelectionChanged(
 	previousReport: AgentNetworkReport | null,
-	selection: AgentNetworkSelections
+	config: AgentNetworkingConfig
 ): boolean {
 	if (!previousReport) {
 		return Boolean(
-			selection.control.selected_interface_name ||
-				selection.control.bind_ip ||
-				selection.control.selection_confirmed
+			config.control.selected_interface_name ||
+				config.control.bind_ip ||
+				config.control.selection_confirmed
 		);
 	}
 
-	return !bindingSelectionMatchesReport(selection.control, previousReport.control);
+	return !bindingSelectionMatchesReport(config.control, previousReport.control);
+}
+
+function natConfigMatchesStatus(
+	config: AgentNetworkingConfig,
+	report: AgentNetworkReport,
+	status: NatStatusSnapshot | null
+): boolean {
+	if (report.p2p.state !== 'applied' || !report.p2p.ready) {
+		return true;
+	}
+
+	if (!status) {
+		return false;
+	}
+
+	if (config.nat.enabled !== status.enabled) {
+		return false;
+	}
+
+	if (config.nat.igd_ip !== status.igd_ip) {
+		return false;
+	}
+
+	if (config.nat.external_ip_override !== status.external_ip_override) {
+		return false;
+	}
+
+	if (status.backend && !config.nat.backend_order.includes(status.backend)) {
+		return false;
+	}
+
+	return true;
+}
+
+function networkingConfigMatchesRuntime(
+	config: AgentNetworkingConfig,
+	report: AgentNetworkReport,
+	status: NatStatusSnapshot | null
+): boolean {
+	return selectionMatchesReport(config, report) && natConfigMatchesStatus(config, report, status);
 }
 
 export async function refreshAgentInterface(indexerId: string): Promise<AgentNetworkReport> {
@@ -82,11 +125,16 @@ export async function refreshAgentInterface(indexerId: string): Promise<AgentNet
 	}
 
 	try {
-		const report = await fetchAgentInterfaceReport(agent);
+		const stats = await fetchAgentStats(agent);
+		const report = stats.interface_report;
+		if (!report) {
+			throw new Error('agent stats did not include interface report');
+		}
 		storeAgentInterfaceReport(indexerId, report);
-		const selection = getAgentInterfaceSelection(indexerId);
-		if (!selectionMatchesReport(selection, report)) {
-			return applyAgentInterfaceSelection(indexerId, agent.protocol, selection);
+		storeAgentNatStatus(indexerId, stats.nat);
+		const config = getAgentNetworkingConfig(indexerId);
+		if (!networkingConfigMatchesRuntime(config, report, stats.nat)) {
+			return applyAgentInterfaceSelection(indexerId, agent.protocol, config);
 		}
 		return report;
 	} catch (error) {
@@ -103,7 +151,7 @@ export async function refreshAllAgentInterfaces(): Promise<void> {
 export async function applyAgentInterfaceSelection(
 	indexerId: string,
 	protocol: Protocol,
-	selection: AgentNetworkSelections
+	config: AgentNetworkingConfig
 ): Promise<AgentNetworkReport> {
 	const agent = getRegistration(indexerId);
 	if (!agent) {
@@ -111,11 +159,11 @@ export async function applyAgentInterfaceSelection(
 	}
 
 	const previousReport = getAgentInterfaceReport(indexerId);
-	updateAgentInterfaceSelection(indexerId, selection);
+	updateAgentNetworkingConfig(indexerId, config);
 
 	const payload: ConfigUpdate = {
 		protocol,
-		config: selection
+		config
 	};
 
 	const response = await fetch(`${agent.url}/api/internal/config-update`, {
@@ -135,7 +183,7 @@ export async function applyAgentInterfaceSelection(
 	try {
 		return await refreshAgentInterface(indexerId);
 	} catch (error) {
-		if (controlSelectionChanged(previousReport, selection) && previousReport) {
+		if (controlSelectionChanged(previousReport, config) && previousReport) {
 			storeAgentInterfaceError(indexerId, CONTROL_REBIND_WAIT_MESSAGE);
 			return previousReport;
 		}

@@ -106,7 +106,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [registration, report, selection, last_error]
+                required: [registration, report, config, nat, last_error]
                 properties:
                   registration:
                     $ref: '#/components/schemas/IndexerRegistration'
@@ -114,8 +114,12 @@ paths:
                     allOf:
                       - $ref: '#/components/schemas/AgentNetworkReport'
                     nullable: true
-                  selection:
-                    $ref: '#/components/schemas/AgentNetworkSelections'
+                  config:
+                    $ref: '#/components/schemas/AgentNetworkingConfig'
+                  nat:
+                    allOf:
+                      - $ref: '#/components/schemas/NatStatusSnapshot'
+                    nullable: true
                   last_error:
                     type: string
                     nullable: true
@@ -134,7 +138,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentNetworkSelections'
+              $ref: '#/components/schemas/AgentNetworkingConfig'
       responses:
         '200':
           description: Refreshed interface report after applying selection
@@ -320,14 +324,32 @@ components:
           $ref: '#/components/schemas/InterfaceBindingReport'
         p2p:
           $ref: '#/components/schemas/InterfaceBindingReport'
-    AgentNetworkSelections:
+    AgentNatConfig:
       type: object
-      required: [control, p2p]
+      required: [enabled, backend_order, igd_ip, external_ip_override]
+      properties:
+        enabled:
+          type: boolean
+        backend_order:
+          type: array
+          items:
+            type: string
+        igd_ip:
+          type: string
+          nullable: true
+        external_ip_override:
+          type: string
+          nullable: true
+    AgentNetworkingConfig:
+      type: object
+      required: [control, p2p, nat]
       properties:
         control:
           $ref: '#/components/schemas/InterfaceBindingSelection'
         p2p:
           $ref: '#/components/schemas/InterfaceBindingSelection'
+        nat:
+          $ref: '#/components/schemas/AgentNatConfig'
     SelectedGateway:
       type: object
       required: [backend, control_url, local_addr, gateway_addr, external_ip]
@@ -372,6 +394,7 @@ components:
           backend,
           bind_ip,
           igd_ip,
+          external_ip_override,
           gateway,
           mappings,
           observed_external_addresses,
@@ -390,6 +413,9 @@ components:
           type: string
           nullable: true
         igd_ip:
+          type: string
+          nullable: true
+        external_ip_override:
           type: string
           nullable: true
         gateway:
