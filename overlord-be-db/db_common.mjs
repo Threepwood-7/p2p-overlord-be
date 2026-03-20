@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, createWriteStream, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { copyFile, rename, stat } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,10 +96,6 @@ export function parseFlagSet(argv) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function sleepSync(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 function escapeXml(value) {
@@ -273,27 +269,6 @@ export async function waitForPostgresReady({ timeoutMs = 15000, pollMs = 250 } =
     }
 
     await sleep(pollMs);
-  }
-
-  return false;
-}
-
-export function waitForPostgresReadySync({ timeoutMs = 15000, pollMs = 250 } = {}) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const result = spawnAllowFailure(
-      getBinaryPath('pg_isready.exe'),
-      ['-h', DEFAULTS.host, '-p', `${DEFAULTS.port}`, '-U', DEFAULTS.user, '-d', 'postgres'],
-      {
-        env: prismaEnv()
-      }
-    );
-
-    if (result.status === 0) {
-      return true;
-    }
-
-    sleepSync(pollMs);
   }
 
   return false;
@@ -713,23 +688,26 @@ export async function runTaskStartAction() {
     };
   }
 
-  spawnOrThrow(
-    getBinaryPath('pg_ctl.exe'),
-    [
-      'start',
-      '-D',
-      PATHS.dataDir,
-      '-l',
-      PATHS.logFile,
-      '-o',
-      `-h ${DEFAULTS.listenHost} -p ${DEFAULTS.port}`
-    ],
-    {
-      env: prismaEnv()
-    }
-  );
+  mkdirSync(PATHS.runtimeDir, { recursive: true });
+  const logFd = openSync(PATHS.logFile, 'a');
 
-  const postgresReady = waitForPostgresReadySync();
+  try {
+    const child = spawn(
+      getBinaryPath('postgres.exe'),
+      ['-D', PATHS.dataDir, '-h', DEFAULTS.listenHost, '-p', `${DEFAULTS.port}`],
+      {
+        detached: true,
+        stdio: ['ignore', logFd, logFd],
+        windowsHide: true,
+        env: prismaEnv()
+      }
+    );
+    child.unref();
+  } finally {
+    closeSync(logFd);
+  }
+
+  const postgresReady = await waitForPostgresReady();
   if (!postgresReady) {
     const logTail = readLogTail();
     fail(
