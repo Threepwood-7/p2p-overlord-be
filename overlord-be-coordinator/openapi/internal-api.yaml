@@ -1,0 +1,271 @@
+openapi: 3.1.0
+info:
+  title: overlord-be-coordinator internal api
+  version: 0.1.0
+servers:
+  - url: http://localhost:13300
+paths:
+  /api/internal/register:
+    post:
+      operationId: registerIndexer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registered indexer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registered]
+                properties:
+                  registered:
+                    $ref: '#/components/schemas/IndexerRegistration'
+  /api/internal/results:
+    post:
+      operationId: ingestResults
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResultBatch'
+      responses:
+        '202':
+          description: Accepted result batch
+  /api/internal/snoop-flush:
+    post:
+      operationId: flushSnoop
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [indexer_id, entries]
+              properties:
+                indexer_id:
+                  type: string
+                  format: uuid
+                entries:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SnoopEntry'
+      responses:
+        '202':
+          description: Accepted snoop snapshot
+  /api/internal/snoop-restore/{indexer_id}:
+    get:
+      operationId: restoreSnoop
+      parameters:
+        - name: indexer_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Restored snoop entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SnoopEntry'
+  /api/internal/popular-hashes:
+    get:
+      operationId: popularHashes
+      responses:
+        '200':
+          description: Popular hashes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PopularHash'
+components:
+  schemas:
+    Protocol:
+      type: string
+      enum: [kad2]
+    HashType:
+      type: object
+      required: [kind, value]
+      properties:
+        kind:
+          type: string
+          enum: [ed2k]
+        value:
+          type: string
+    ContentType:
+      type: string
+      enum: [video, audio, document, archive, software, unknown]
+    TagEntry:
+      type: object
+      required: [key, value]
+      properties:
+        key:
+          type: string
+        value: {}
+    Source:
+      type: object
+      required: [protocol, address, extra]
+      properties:
+        protocol:
+          $ref: '#/components/schemas/Protocol'
+        address:
+          type: string
+        extra: {}
+    FileRecord:
+      type: object
+      required: [hashes, names, size, content_type, tags, sources]
+      properties:
+        hashes:
+          type: array
+          items:
+            $ref: '#/components/schemas/HashType'
+        names:
+          type: array
+          items:
+            type: string
+        size:
+          type: integer
+          format: int64
+          nullable: true
+        content_type:
+          allOf:
+            - $ref: '#/components/schemas/ContentType'
+          nullable: true
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagEntry'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Source'
+    SearchJob:
+      type: object
+      required: [job_id, query, callback_url]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        query:
+          type: string
+        callback_url:
+          type: string
+    ResultBatch:
+      type: object
+      required: [job_id, indexer_id, protocol, files]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          nullable: true
+        indexer_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/Protocol'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileRecord'
+    IndexerStats:
+      type: object
+      required:
+        [
+          indexer_id,
+          protocol,
+          peers_connected,
+          crawl_rate,
+          snoop_queue_depth,
+          staging_queue_depth,
+          uptime_secs
+        ]
+      properties:
+        indexer_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/Protocol'
+        peers_connected:
+          type: integer
+        crawl_rate:
+          type: number
+        snoop_queue_depth:
+          type: integer
+        staging_queue_depth:
+          type: integer
+        uptime_secs:
+          type: integer
+          format: int64
+    ConfigUpdate:
+      type: object
+      required: [protocol, config]
+      properties:
+        protocol:
+          $ref: '#/components/schemas/Protocol'
+        config: {}
+    SnoopEntry:
+      type: object
+      required: [query, hash, hit_count, first_seen, last_seen]
+      properties:
+        query:
+          type: string
+        hash:
+          allOf:
+            - $ref: '#/components/schemas/HashType'
+          nullable: true
+        hit_count:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+    PopularHash:
+      type: object
+      required: [hash, canonical_name, size, source_count]
+      properties:
+        hash:
+          $ref: '#/components/schemas/HashType'
+        canonical_name:
+          type: string
+        size:
+          type: integer
+          format: int64
+        source_count:
+          type: integer
+    RegisterRequest:
+      type: object
+      required: [indexer_id, protocol, url, hostname, version]
+      properties:
+        indexer_id:
+          type: string
+          format: uuid
+        protocol:
+          $ref: '#/components/schemas/Protocol'
+        url:
+          type: string
+        hostname:
+          type: string
+        version:
+          type: string
+    IndexerRegistration:
+      allOf:
+        - $ref: '#/components/schemas/RegisterRequest'
+        - type: object
+          required: [registered_at]
+          properties:
+            registered_at:
+              type: string
+              format: date-time

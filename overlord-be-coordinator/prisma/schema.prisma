@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model File {
+  id          BigInt   @id @default(autoincrement())
+  size        BigInt?
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @default(now())
+  names       FileName[]
+  hashes      FileHash[]
+  tags        FileTag[]
+  sources     Source[]
+}
+
+model FileHash {
+  hashType  String
+  hashValue String
+  fileId    BigInt
+  file      File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([hashType, hashValue])
+}
+
+model FileName {
+  id        BigInt   @id @default(autoincrement())
+  fileId    BigInt
+  name      String
+  firstSeen DateTime @default(now())
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, name])
+}
+
+model FileTag {
+  id      BigInt @id @default(autoincrement())
+  fileId  BigInt
+  key     String
+  value   Json
+  file    File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+}
+
+model Source {
+  id        BigInt   @id @default(autoincrement())
+  fileId    BigInt
+  protocol  String
+  address   String
+  extra     Json
+  seenAt    DateTime @default(now())
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+}
+
+model SearchJob {
+  id           String   @id
+  query        String
+  protocol     String
+  createdAt    DateTime @default(now())
+  dispatchedTo Json
+}
+
+model SnoopEntry {
+  id         BigInt   @id @default(autoincrement())
+  indexerId  String
+  query      String
+  hash       Json?
+  hitCount   Int
+  firstSeen  DateTime
+  lastSeen   DateTime
+}
+
+model SnoopLog {
+  id        BigInt   @id @default(autoincrement())
+  query     String
+  hash      Json?
+  hitCount  Int
+  seenAt    DateTime @default(now())
+}
+
+model StatsSample {
+  id                BigInt   @id @default(autoincrement())
+  indexerId         String
+  protocol          String
+  peersConnected    Int
+  crawlRate         Float
+  snoopQueueDepth   Int
+  stagingQueueDepth Int
+  uptimeSecs        BigInt
+  createdAt         DateTime @default(now())
+}
+
+model IndexerRegistry {
+  id           String   @id
+  protocol     String
+  url          String
+  hostname     String
+  version      String
+  registeredAt DateTime @default(now())
+}
+
+model RawHash {
+  hashType     String
+  hashValue    String
+  protocol     String
+  firstSeen    DateTime @default(now())
+  status       String   @default("pending")
+
+  @@id([hashType, hashValue])
+}
