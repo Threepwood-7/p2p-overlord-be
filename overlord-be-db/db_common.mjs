@@ -449,6 +449,7 @@ export function extractArchive(archivePath) {
   resetPath(PATHS.postgresInstallDir);
   mkdirSync(PATHS.postgresInstallDir, { recursive: true });
   spawnOrThrow('tar', ['-xf', archivePath, '-C', PATHS.postgresInstallDir]);
+  spawnOrThrow('powershell', ['-Command', `Get-ChildItem -Path '${PATHS.postgresInstallDir}' -Recurse | Unblock-File`]);
 }
 
 export function writeCoordinatorEnv({ forceEnv = false } = {}) {
