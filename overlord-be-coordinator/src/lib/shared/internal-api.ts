@@ -64,15 +64,31 @@ export type AgentInterface = {
 
 export type InterfaceSelectionState = 'pending' | 'confirmed' | 'applied' | 'error';
 
-export type AgentInterfaceReport = {
-	interfaces: AgentInterface[];
+export type InterfaceBindingSelection = {
+	selected_interface_name: string | null;
+	bind_ip: string | null;
+	selection_confirmed: boolean;
+};
+
+export type InterfaceBindingReport = {
 	recommended_interface_name: string | null;
 	selected_interface_name: string | null;
 	resolved_bind_ip: string | null;
 	selection_confirmed: boolean;
-	networking_ready: boolean;
+	ready: boolean;
 	state: InterfaceSelectionState;
 	last_error: string | null;
+};
+
+export type AgentNetworkReport = {
+	interfaces: AgentInterface[];
+	control: InterfaceBindingReport;
+	p2p: InterfaceBindingReport;
+};
+
+export type AgentNetworkSelections = {
+	control: InterfaceBindingSelection;
+	p2p: InterfaceBindingSelection;
 };
 
 export type SelectedGateway = {
@@ -114,7 +130,7 @@ export type IndexerStats = {
 	staging_queue_depth: number;
 	uptime_secs: number;
 	nat: NatStatusSnapshot | null;
-	interface_report: AgentInterfaceReport | null;
+	interface_report: AgentNetworkReport | null;
 };
 
 export type ConfigUpdate = {
@@ -147,10 +163,4 @@ export type RegisterRequest = {
 
 export type IndexerRegistration = RegisterRequest & {
 	registered_at: string;
-};
-
-export type AgentInterfaceSelection = {
-	selected_interface_name: string | null;
-	bind_ip: string | null;
-	selection_confirmed: boolean;
 };

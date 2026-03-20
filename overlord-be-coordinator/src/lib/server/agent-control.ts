@@ -1,68 +1,35 @@
 import type {
-	AgentInterfaceReport,
-	AgentInterfaceSelection,
+	AgentNetworkReport,
+	AgentNetworkSelections,
 	ConfigUpdate,
+	InterfaceBindingReport,
+	InterfaceBindingSelection,
 	IndexerRegistration,
 	Protocol
 } from '$lib/shared/internal-api';
 import {
+	getAgentInterfaceReport,
 	getAgentInterfaceSelection,
 	getAgentInterfaceState,
-	isAgentInterfaceSelectionManuallyManaged,
 	getRegistration,
 	storeAgentInterfaceError,
 	storeAgentInterfaceReport,
 	updateAgentInterfaceSelection
 } from '$lib/server/state';
 
-async function fetchAgentInterfaceReport(agent: IndexerRegistration): Promise<AgentInterfaceReport> {
+const CONTROL_REBIND_WAIT_MESSAGE = 'waiting for agent control rebind';
+
+async function fetchAgentInterfaceReport(agent: IndexerRegistration): Promise<AgentNetworkReport> {
 	const response = await fetch(`${agent.url}/api/internal/interfaces`);
 	if (!response.ok) {
 		throw new Error(`agent interface fetch failed with ${response.status}`);
 	}
-	return (await response.json()) as AgentInterfaceReport;
+	return (await response.json()) as AgentNetworkReport;
 }
 
-function deriveAutoSelection(
-	report: AgentInterfaceReport,
-	selection: AgentInterfaceSelection
-): AgentInterfaceSelection | null {
-	if (
-		hasSelectionIntent(selection) ||
-		report.selection_confirmed ||
-		report.selected_interface_name ||
-		report.resolved_bind_ip
-	) {
-		return null;
-	}
-
-	const recommended = report.interfaces.find(
-		(iface) => iface.name === report.recommended_interface_name && iface.is_vpn_candidate
-	);
-	if (!recommended) {
-		return null;
-	}
-
-	return {
-		selected_interface_name: recommended.name,
-		bind_ip: null,
-		selection_confirmed: true
-	};
-}
-
-function hasSelectionIntent(selection: AgentInterfaceSelection): boolean {
-	return Boolean(
-		selection.selection_confirmed || selection.selected_interface_name || selection.bind_ip
-	);
-}
-
-function hasDesiredSelection(indexerId: string, selection: AgentInterfaceSelection): boolean {
-	return isAgentInterfaceSelectionManuallyManaged(indexerId) || hasSelectionIntent(selection);
-}
-
-function selectionMatchesReport(
-	selection: AgentInterfaceSelection,
-	report: AgentInterfaceReport
+function bindingSelectionMatchesReport(
+	selection: InterfaceBindingSelection,
+	report: InterfaceBindingReport
 ): boolean {
 	if (selection.selected_interface_name !== report.selected_interface_name) {
 		return false;
@@ -83,7 +50,32 @@ function selectionMatchesReport(
 	return true;
 }
 
-export async function refreshAgentInterface(indexerId: string): Promise<AgentInterfaceReport> {
+function selectionMatchesReport(
+	selection: AgentNetworkSelections,
+	report: AgentNetworkReport
+): boolean {
+	return (
+		bindingSelectionMatchesReport(selection.control, report.control) &&
+		bindingSelectionMatchesReport(selection.p2p, report.p2p)
+	);
+}
+
+function controlSelectionChanged(
+	previousReport: AgentNetworkReport | null,
+	selection: AgentNetworkSelections
+): boolean {
+	if (!previousReport) {
+		return Boolean(
+			selection.control.selected_interface_name ||
+				selection.control.bind_ip ||
+				selection.control.selection_confirmed
+		);
+	}
+
+	return !bindingSelectionMatchesReport(selection.control, previousReport.control);
+}
+
+export async function refreshAgentInterface(indexerId: string): Promise<AgentNetworkReport> {
 	const agent = getRegistration(indexerId);
 	if (!agent) {
 		throw new Error(`unknown agent ${indexerId}`);
@@ -93,15 +85,8 @@ export async function refreshAgentInterface(indexerId: string): Promise<AgentInt
 		const report = await fetchAgentInterfaceReport(agent);
 		storeAgentInterfaceReport(indexerId, report);
 		const selection = getAgentInterfaceSelection(indexerId);
-		if (hasDesiredSelection(indexerId, selection) && !selectionMatchesReport(selection, report)) {
+		if (!selectionMatchesReport(selection, report)) {
 			return applyAgentInterfaceSelection(indexerId, agent.protocol, selection);
-		}
-
-		const autoSelection = deriveAutoSelection(report, selection);
-		if (autoSelection) {
-			return applyAgentInterfaceSelection(indexerId, agent.protocol, autoSelection, {
-				manuallyManaged: false
-			});
 		}
 		return report;
 	} catch (error) {
@@ -118,23 +103,19 @@ export async function refreshAllAgentInterfaces(): Promise<void> {
 export async function applyAgentInterfaceSelection(
 	indexerId: string,
 	protocol: Protocol,
-	selection: AgentInterfaceSelection,
-	options?: {
-		manuallyManaged?: boolean;
-	}
-): Promise<AgentInterfaceReport> {
+	selection: AgentNetworkSelections
+): Promise<AgentNetworkReport> {
 	const agent = getRegistration(indexerId);
 	if (!agent) {
 		throw new Error(`unknown agent ${indexerId}`);
 	}
 
-	updateAgentInterfaceSelection(indexerId, selection, options);
+	const previousReport = getAgentInterfaceReport(indexerId);
+	updateAgentInterfaceSelection(indexerId, selection);
 
 	const payload: ConfigUpdate = {
 		protocol,
-		config: {
-			nat: selection
-		}
+		config: selection
 	};
 
 	const response = await fetch(`${agent.url}/api/internal/config-update`, {
@@ -151,5 +132,13 @@ export async function applyAgentInterfaceSelection(
 		throw new Error(message);
 	}
 
-	return refreshAgentInterface(indexerId);
+	try {
+		return await refreshAgentInterface(indexerId);
+	} catch (error) {
+		if (controlSelectionChanged(previousReport, selection) && previousReport) {
+			storeAgentInterfaceError(indexerId, CONTROL_REBIND_WAIT_MESSAGE);
+			return previousReport;
+		}
+		throw error;
+	}
 }

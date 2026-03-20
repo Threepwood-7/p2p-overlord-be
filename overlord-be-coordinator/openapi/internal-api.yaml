@@ -112,10 +112,10 @@ paths:
                     $ref: '#/components/schemas/IndexerRegistration'
                   report:
                     allOf:
-                      - $ref: '#/components/schemas/AgentInterfaceReport'
+                      - $ref: '#/components/schemas/AgentNetworkReport'
                     nullable: true
                   selection:
-                    $ref: '#/components/schemas/AgentInterfaceSelection'
+                    $ref: '#/components/schemas/AgentNetworkSelections'
                   last_error:
                     type: string
                     nullable: true
@@ -134,14 +134,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AgentInterfaceSelection'
+              $ref: '#/components/schemas/AgentNetworkSelections'
       responses:
         '200':
           description: Refreshed interface report after applying selection
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AgentInterfaceReport'
+                $ref: '#/components/schemas/AgentNetworkReport'
 components:
   schemas:
     Protocol:
@@ -265,24 +265,31 @@ components:
     InterfaceSelectionState:
       type: string
       enum: [pending, confirmed, applied, error]
-    AgentInterfaceReport:
+    InterfaceBindingSelection:
+      type: object
+      required: [selected_interface_name, bind_ip, selection_confirmed]
+      properties:
+        selected_interface_name:
+          type: string
+          nullable: true
+        bind_ip:
+          type: string
+          nullable: true
+        selection_confirmed:
+          type: boolean
+    InterfaceBindingReport:
       type: object
       required:
         [
-          interfaces,
           recommended_interface_name,
           selected_interface_name,
           resolved_bind_ip,
           selection_confirmed,
-          networking_ready,
+          ready,
           state,
           last_error
         ]
       properties:
-        interfaces:
-          type: array
-          items:
-            $ref: '#/components/schemas/AgentInterface'
         recommended_interface_name:
           type: string
           nullable: true
@@ -294,13 +301,33 @@ components:
           nullable: true
         selection_confirmed:
           type: boolean
-        networking_ready:
+        ready:
           type: boolean
         state:
           $ref: '#/components/schemas/InterfaceSelectionState'
         last_error:
           type: string
           nullable: true
+    AgentNetworkReport:
+      type: object
+      required: [interfaces, control, p2p]
+      properties:
+        interfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInterface'
+        control:
+          $ref: '#/components/schemas/InterfaceBindingReport'
+        p2p:
+          $ref: '#/components/schemas/InterfaceBindingReport'
+    AgentNetworkSelections:
+      type: object
+      required: [control, p2p]
+      properties:
+        control:
+          $ref: '#/components/schemas/InterfaceBindingSelection'
+        p2p:
+          $ref: '#/components/schemas/InterfaceBindingSelection'
     SelectedGateway:
       type: object
       required: [backend, control_url, local_addr, gateway_addr, external_ip]
@@ -420,7 +447,7 @@ components:
           nullable: true
         interface_report:
           allOf:
-            - $ref: '#/components/schemas/AgentInterfaceReport'
+            - $ref: '#/components/schemas/AgentNetworkReport'
           nullable: true
     ConfigUpdate:
       type: object
@@ -484,15 +511,3 @@ components:
             registered_at:
               type: string
               format: date-time
-    AgentInterfaceSelection:
-      type: object
-      required: [selected_interface_name, bind_ip, selection_confirmed]
-      properties:
-        selected_interface_name:
-          type: string
-          nullable: true
-        bind_ip:
-          type: string
-          nullable: true
-        selection_confirmed:
-          type: boolean

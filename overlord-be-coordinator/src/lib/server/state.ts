@@ -1,6 +1,7 @@
 import type {
-	AgentInterfaceReport,
-	AgentInterfaceSelection,
+	AgentNetworkReport,
+	AgentNetworkSelections,
+	InterfaceBindingSelection,
 	FileRecord,
 	IndexerRegistration,
 	PopularHash,
@@ -23,9 +24,8 @@ type AggregatedFile = FileRecord & {
 
 type CoordinatorState = {
 	registrations: Map<string, IndexerRegistration>;
-	agentInterfaceReports: Map<string, AgentInterfaceReport | null>;
-	agentInterfaceSelections: Map<string, AgentInterfaceSelection>;
-	agentInterfaceSelectionManaged: Map<string, boolean>;
+	agentInterfaceReports: Map<string, AgentNetworkReport | null>;
+	agentInterfaceSelections: Map<string, AgentNetworkSelections>;
 	agentInterfaceErrors: Map<string, string | null>;
 	searchJobs: Map<string, SearchDispatch>;
 	snoopEntries: Map<string, SnoopEntry[]>;
@@ -44,7 +44,6 @@ function createState(): CoordinatorState {
 		registrations: new Map(),
 		agentInterfaceReports: new Map(),
 		agentInterfaceSelections: new Map(),
-		agentInterfaceSelectionManaged: new Map(),
 		agentInterfaceErrors: new Map(),
 		searchJobs: new Map(),
 		snoopEntries: new Map(),
@@ -63,19 +62,13 @@ export function registerIndexer(payload: RegisterRequest): IndexerRegistration {
 		...payload,
 		registered_at: new Date().toISOString()
 	};
-	const existingSelection = coordinatorState.agentInterfaceSelections.get(payload.indexer_id) ?? {
-		selected_interface_name: null,
-		bind_ip: null,
-		selection_confirmed: false
-	};
+	const existingSelection =
+		coordinatorState.agentInterfaceSelections.get(payload.indexer_id) ?? createEmptySelections();
 	const existingReport = coordinatorState.agentInterfaceReports.get(payload.indexer_id) ?? null;
-	const existingManaged =
-		coordinatorState.agentInterfaceSelectionManaged.get(payload.indexer_id) ?? false;
 	const existingError = coordinatorState.agentInterfaceErrors.get(payload.indexer_id) ?? null;
 	coordinatorState.registrations.set(payload.indexer_id, registered);
 	coordinatorState.agentInterfaceSelections.set(payload.indexer_id, existingSelection);
 	coordinatorState.agentInterfaceReports.set(payload.indexer_id, existingReport);
-	coordinatorState.agentInterfaceSelectionManaged.set(payload.indexer_id, existingManaged);
 	coordinatorState.agentInterfaceErrors.set(payload.indexer_id, existingError);
 	return registered;
 }
@@ -86,7 +79,7 @@ export function getReadyIndexersByProtocol(
 	return Array.from(coordinatorState.registrations.values()).filter(
 		(entry) =>
 			entry.protocol === protocol &&
-			coordinatorState.agentInterfaceReports.get(entry.indexer_id)?.state === 'applied'
+			coordinatorState.agentInterfaceReports.get(entry.indexer_id)?.p2p.state === 'applied'
 	);
 }
 
@@ -145,9 +138,12 @@ export function restoreSnoopEntries(indexerId: string): SnoopEntry[] {
 	return coordinatorState.snoopEntries.get(indexerId) ?? [];
 }
 
-export function storeAgentInterfaceReport(indexerId: string, report: AgentInterfaceReport): void {
+export function storeAgentInterfaceReport(indexerId: string, report: AgentNetworkReport): void {
 	coordinatorState.agentInterfaceReports.set(indexerId, report);
-	coordinatorState.agentInterfaceErrors.set(indexerId, report.last_error ?? null);
+	coordinatorState.agentInterfaceErrors.set(
+		indexerId,
+		report.control.last_error ?? report.p2p.last_error ?? null
+	);
 }
 
 export function storeAgentInterfaceError(indexerId: string, error: string): void {
@@ -156,33 +152,17 @@ export function storeAgentInterfaceError(indexerId: string, error: string): void
 
 export function updateAgentInterfaceSelection(
 	indexerId: string,
-	selection: AgentInterfaceSelection,
-	options?: {
-		manuallyManaged?: boolean;
-	}
+	selection: AgentNetworkSelections
 ): void {
 	coordinatorState.agentInterfaceSelections.set(indexerId, selection);
-	if (options?.manuallyManaged !== undefined) {
-		coordinatorState.agentInterfaceSelectionManaged.set(indexerId, options.manuallyManaged);
-	}
 }
 
-export function getAgentInterfaceSelection(indexerId: string): AgentInterfaceSelection {
-	return (
-		coordinatorState.agentInterfaceSelections.get(indexerId) ?? {
-			selected_interface_name: null,
-			bind_ip: null,
-			selection_confirmed: false
-		}
-	);
+export function getAgentInterfaceSelection(indexerId: string): AgentNetworkSelections {
+	return coordinatorState.agentInterfaceSelections.get(indexerId) ?? createEmptySelections();
 }
 
-export function getAgentInterfaceReport(indexerId: string): AgentInterfaceReport | null {
+export function getAgentInterfaceReport(indexerId: string): AgentNetworkReport | null {
 	return coordinatorState.agentInterfaceReports.get(indexerId) ?? null;
-}
-
-export function isAgentInterfaceSelectionManuallyManaged(indexerId: string): boolean {
-	return coordinatorState.agentInterfaceSelectionManaged.get(indexerId) ?? false;
 }
 
 export function getAgentInterfaceError(indexerId: string): string | null {
@@ -236,4 +216,19 @@ function dedupeSources(
 		seen.set(`${source.protocol}:${source.address}:${JSON.stringify(source.extra)}`, source);
 	}
 	return Array.from(seen.values());
+}
+
+function createEmptyBindingSelection(): InterfaceBindingSelection {
+	return {
+		selected_interface_name: null,
+		bind_ip: null,
+		selection_confirmed: false
+	};
+}
+
+function createEmptySelections(): AgentNetworkSelections {
+	return {
+		control: createEmptyBindingSelection(),
+		p2p: createEmptyBindingSelection()
+	};
 }

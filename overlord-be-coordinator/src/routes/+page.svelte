@@ -1,4 +1,6 @@
 <script lang="ts">
+	const ANY_BIND_OPTION = '__any__';
+
 	export let data:
 		| {
 				status: {
@@ -16,8 +18,8 @@
 						version: string;
 						registered_at: string;
 					};
-					interface_report: import('$lib/shared/internal-api').AgentInterfaceReport | null;
-					selection: import('$lib/shared/internal-api').AgentInterfaceSelection;
+					interface_report: import('$lib/shared/internal-api').AgentNetworkReport | null;
+					selection: import('$lib/shared/internal-api').AgentNetworkSelections;
 					last_error: string | null;
 				}>;
 		  }
@@ -47,10 +49,19 @@
 					<article>
 						<h3>{agent.registration.protocol} · {agent.registration.hostname}</h3>
 						<p>{agent.registration.indexer_id}</p>
-						<p>Status: {agent.interface_report?.state ?? 'pending'}</p>
-						<p>Recommended: {agent.interface_report?.recommended_interface_name ?? 'none'}</p>
-						<p>Selected: {agent.interface_report?.selected_interface_name ?? 'none'}</p>
-						<p>Resolved bind IP: {agent.interface_report?.resolved_bind_ip ?? 'none'}</p>
+						<p>Registered URL: {agent.registration.url}</p>
+						<p>
+							Control: {agent.interface_report?.control.state ?? 'pending'} · ready:
+							{agent.interface_report?.control.ready ? 'yes' : 'no'} · selected:
+							{agent.interface_report?.control.selected_interface_name ?? 'none'} · bind:
+							{agent.interface_report?.control.resolved_bind_ip ?? 'none'}
+						</p>
+						<p>
+							P2P: {agent.interface_report?.p2p.state ?? 'pending'} · ready:
+							{agent.interface_report?.p2p.ready ? 'yes' : 'no'} · selected:
+							{agent.interface_report?.p2p.selected_interface_name ?? 'none'} · bind:
+							{agent.interface_report?.p2p.resolved_bind_ip ?? 'none'}
+						</p>
 						{#if agent.last_error}
 							<p>Error: {agent.last_error}</p>
 						{/if}
@@ -60,13 +71,22 @@
 							action={`/api/agents/${agent.registration.indexer_id}/interface-selection`}
 						>
 							<label>
-								Interface
-								<select name="selected_interface_name">
+								Control interface
+								<select name="control_selected_interface_name">
 									<option value="">-- choose --</option>
+									<option
+										value={ANY_BIND_OPTION}
+										selected={
+											agent.selection.control.selected_interface_name === null &&
+											agent.selection.control.bind_ip === '0.0.0.0'
+										}
+									>
+										Any (0.0.0.0)
+									</option>
 									{#each agent.interface_report?.interfaces ?? [] as iface}
 										<option
 											value={iface.name}
-											selected={iface.name === agent.selection.selected_interface_name}
+											selected={iface.name === agent.selection.control.selected_interface_name}
 										>
 											{iface.name}
 											{#if iface.is_vpn_candidate} (vpn){/if}
@@ -77,17 +97,57 @@
 							</label>
 
 							<label>
-								Forced bind IP
-								<input name="bind_ip" value={agent.selection.bind_ip ?? ''} />
+								Control bind IP
+								<input name="control_bind_ip" value={agent.selection.control.bind_ip ?? ''} />
 							</label>
 
 							<label>
 								<input
 									type="checkbox"
-									name="selection_confirmed"
-									checked={agent.selection.selection_confirmed}
+									name="control_selection_confirmed"
+									checked={agent.selection.control.selection_confirmed}
 								/>
-								Selection confirmed
+								Control selection confirmed
+							</label>
+
+							<label>
+								P2P interface
+								<select name="p2p_selected_interface_name">
+									<option value="">-- choose --</option>
+									<option
+										value={ANY_BIND_OPTION}
+										selected={
+											agent.selection.p2p.selected_interface_name === null &&
+											agent.selection.p2p.bind_ip === '0.0.0.0'
+										}
+									>
+										Any (0.0.0.0)
+									</option>
+									{#each agent.interface_report?.interfaces ?? [] as iface}
+										<option
+											value={iface.name}
+											selected={iface.name === agent.selection.p2p.selected_interface_name}
+										>
+											{iface.name}
+											{#if iface.is_vpn_candidate} (vpn){/if}
+											{#if iface.has_default_route} (default-route){/if}
+										</option>
+									{/each}
+								</select>
+							</label>
+
+							<label>
+								P2P bind IP
+								<input name="p2p_bind_ip" value={agent.selection.p2p.bind_ip ?? ''} />
+							</label>
+
+							<label>
+								<input
+									type="checkbox"
+									name="p2p_selection_confirmed"
+									checked={agent.selection.p2p.selection_confirmed}
+								/>
+								P2P selection confirmed
 							</label>
 
 							<button type="submit">Apply</button>
