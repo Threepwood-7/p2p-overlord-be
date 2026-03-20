@@ -8,6 +8,7 @@ import type {
 import {
 	getAgentInterfaceSelection,
 	getAgentInterfaceState,
+	isAgentInterfaceSelectionManuallyManaged,
 	getRegistration,
 	storeAgentInterfaceError,
 	storeAgentInterfaceReport,
@@ -26,7 +27,12 @@ function deriveAutoSelection(
 	report: AgentInterfaceReport,
 	selection: AgentInterfaceSelection
 ): AgentInterfaceSelection | null {
-	if (selection.selection_confirmed || selection.selected_interface_name || selection.bind_ip) {
+	if (
+		hasSelectionIntent(selection) ||
+		report.selection_confirmed ||
+		report.selected_interface_name ||
+		report.resolved_bind_ip
+	) {
 		return null;
 	}
 
@@ -44,6 +50,39 @@ function deriveAutoSelection(
 	};
 }
 
+function hasSelectionIntent(selection: AgentInterfaceSelection): boolean {
+	return Boolean(
+		selection.selection_confirmed || selection.selected_interface_name || selection.bind_ip
+	);
+}
+
+function hasDesiredSelection(indexerId: string, selection: AgentInterfaceSelection): boolean {
+	return isAgentInterfaceSelectionManuallyManaged(indexerId) || hasSelectionIntent(selection);
+}
+
+function selectionMatchesReport(
+	selection: AgentInterfaceSelection,
+	report: AgentInterfaceReport
+): boolean {
+	if (selection.selected_interface_name !== report.selected_interface_name) {
+		return false;
+	}
+
+	if (selection.selection_confirmed !== report.selection_confirmed) {
+		return false;
+	}
+
+	if (selection.bind_ip) {
+		return selection.bind_ip === report.resolved_bind_ip;
+	}
+
+	if (!selection.selected_interface_name) {
+		return report.resolved_bind_ip === null;
+	}
+
+	return true;
+}
+
 export async function refreshAgentInterface(indexerId: string): Promise<AgentInterfaceReport> {
 	const agent = getRegistration(indexerId);
 	if (!agent) {
@@ -53,9 +92,16 @@ export async function refreshAgentInterface(indexerId: string): Promise<AgentInt
 	try {
 		const report = await fetchAgentInterfaceReport(agent);
 		storeAgentInterfaceReport(indexerId, report);
-		const autoSelection = deriveAutoSelection(report, getAgentInterfaceSelection(indexerId));
+		const selection = getAgentInterfaceSelection(indexerId);
+		if (hasDesiredSelection(indexerId, selection) && !selectionMatchesReport(selection, report)) {
+			return applyAgentInterfaceSelection(indexerId, agent.protocol, selection);
+		}
+
+		const autoSelection = deriveAutoSelection(report, selection);
 		if (autoSelection) {
-			return applyAgentInterfaceSelection(indexerId, agent.protocol, autoSelection);
+			return applyAgentInterfaceSelection(indexerId, agent.protocol, autoSelection, {
+				manuallyManaged: false
+			});
 		}
 		return report;
 	} catch (error) {
@@ -72,14 +118,17 @@ export async function refreshAllAgentInterfaces(): Promise<void> {
 export async function applyAgentInterfaceSelection(
 	indexerId: string,
 	protocol: Protocol,
-	selection: AgentInterfaceSelection
+	selection: AgentInterfaceSelection,
+	options?: {
+		manuallyManaged?: boolean;
+	}
 ): Promise<AgentInterfaceReport> {
 	const agent = getRegistration(indexerId);
 	if (!agent) {
 		throw new Error(`unknown agent ${indexerId}`);
 	}
 
-	updateAgentInterfaceSelection(indexerId, selection);
+	updateAgentInterfaceSelection(indexerId, selection, options);
 
 	const payload: ConfigUpdate = {
 		protocol,

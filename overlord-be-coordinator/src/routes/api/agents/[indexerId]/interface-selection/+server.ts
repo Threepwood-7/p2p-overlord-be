@@ -17,8 +17,10 @@ async function applySelection(
 	protocol: Protocol,
 	selection: AgentInterfaceSelection
 ) {
-	const report = await applyAgentInterfaceSelection(indexerId, protocol, selection);
-	return json({ ok: true, report });
+	const report = await applyAgentInterfaceSelection(indexerId, protocol, selection, {
+		manuallyManaged: true
+	});
+	return json(report);
 }
 
 export const POST: RequestHandler = async ({ params, request }) => {
@@ -44,6 +46,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		bind_ip: normalizeOptionalString(form.get('bind_ip')),
 		selection_confirmed: form.get('selection_confirmed') === 'on'
 	};
-	await applyAgentInterfaceSelection(indexerId, registration.protocol, selection);
+	await applyAgentInterfaceSelection(indexerId, registration.protocol, selection, {
+		manuallyManaged: true
+	});
 	throw redirect(303, '/');
 };

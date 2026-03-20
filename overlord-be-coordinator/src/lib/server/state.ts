@@ -25,6 +25,7 @@ type CoordinatorState = {
 	registrations: Map<string, IndexerRegistration>;
 	agentInterfaceReports: Map<string, AgentInterfaceReport | null>;
 	agentInterfaceSelections: Map<string, AgentInterfaceSelection>;
+	agentInterfaceSelectionManaged: Map<string, boolean>;
 	agentInterfaceErrors: Map<string, string | null>;
 	searchJobs: Map<string, SearchDispatch>;
 	snoopEntries: Map<string, SnoopEntry[]>;
@@ -43,6 +44,7 @@ function createState(): CoordinatorState {
 		registrations: new Map(),
 		agentInterfaceReports: new Map(),
 		agentInterfaceSelections: new Map(),
+		agentInterfaceSelectionManaged: new Map(),
 		agentInterfaceErrors: new Map(),
 		searchJobs: new Map(),
 		snoopEntries: new Map(),
@@ -67,10 +69,13 @@ export function registerIndexer(payload: RegisterRequest): IndexerRegistration {
 		selection_confirmed: false
 	};
 	const existingReport = coordinatorState.agentInterfaceReports.get(payload.indexer_id) ?? null;
+	const existingManaged =
+		coordinatorState.agentInterfaceSelectionManaged.get(payload.indexer_id) ?? false;
 	const existingError = coordinatorState.agentInterfaceErrors.get(payload.indexer_id) ?? null;
 	coordinatorState.registrations.set(payload.indexer_id, registered);
 	coordinatorState.agentInterfaceSelections.set(payload.indexer_id, existingSelection);
 	coordinatorState.agentInterfaceReports.set(payload.indexer_id, existingReport);
+	coordinatorState.agentInterfaceSelectionManaged.set(payload.indexer_id, existingManaged);
 	coordinatorState.agentInterfaceErrors.set(payload.indexer_id, existingError);
 	return registered;
 }
@@ -151,9 +156,15 @@ export function storeAgentInterfaceError(indexerId: string, error: string): void
 
 export function updateAgentInterfaceSelection(
 	indexerId: string,
-	selection: AgentInterfaceSelection
+	selection: AgentInterfaceSelection,
+	options?: {
+		manuallyManaged?: boolean;
+	}
 ): void {
 	coordinatorState.agentInterfaceSelections.set(indexerId, selection);
+	if (options?.manuallyManaged !== undefined) {
+		coordinatorState.agentInterfaceSelectionManaged.set(indexerId, options.manuallyManaged);
+	}
 }
 
 export function getAgentInterfaceSelection(indexerId: string): AgentInterfaceSelection {
@@ -168,6 +179,10 @@ export function getAgentInterfaceSelection(indexerId: string): AgentInterfaceSel
 
 export function getAgentInterfaceReport(indexerId: string): AgentInterfaceReport | null {
 	return coordinatorState.agentInterfaceReports.get(indexerId) ?? null;
+}
+
+export function isAgentInterfaceSelectionManuallyManaged(indexerId: string): boolean {
+	return coordinatorState.agentInterfaceSelectionManaged.get(indexerId) ?? false;
 }
 
 export function getAgentInterfaceError(indexerId: string): string | null {
