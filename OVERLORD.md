@@ -35,7 +35,7 @@ unique identifier for traceability across conversations, issues, and commits.
 9. [IPFS Indexer (`overlord-ipfs`)](#9-ipfs-indexer-overlord-ipfs)
 10. [Frontend (embedded in SVC-001)](#10-frontend-embedded-in-svc-001)
 11. [Configuration](#11-configuration)
-12. [Docker Compose](#12-docker-compose)
+12. [Containerization Status](#12-containerization-status)
 13. [Phase Roadmap](#13-phase-roadmap)
 14. [Backlog](#14-backlog)
 15. [ID Master Index](#15-id-master-index)
@@ -104,7 +104,6 @@ p2p-overlord/
 ├── OVERLORD.md                 # this document
 ├── overlord-agents/            # Rust agents repo contents
 │   ├── Cargo.toml              # workspace root (Rust agents only)
-│   ├── docker-compose.yml
 │   ├── overlord.toml.example   # annotated reference config
 │   └── crates/
 │       ├── overlord-agent-common/   # shared Rust types, traits, HTTP client/server helpers
@@ -1394,78 +1393,17 @@ weight_fts_rank                    = 0.8      # [F017]
 
 ---
 
-## 12. Docker Compose
+## 12. Containerization Status
 
-```yaml
-services:
+Docker is not part of the active workflow right now.
 
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB:       overlord
-      POSTGRES_USER:     overlord
-      POSTGRES_PASSWORD: overlord
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+The current Phase 1 setup assumes:
+- `overlord-agent-*` services are run directly from the Rust workspace during development
+- `overlord-be-coordinator` is run directly from the Node.js app workspace
+- PostgreSQL is provisioned separately when persistence is needed
 
-  coordinator:                           # SVC-001
-    build: ./coordinator
-    ports:
-      - "13300:13300"
-    volumes:
-      - ./overlord.toml:/config/overlord.toml
-    environment:
-      - DATABASE_URL=postgresql://overlord:overlord@postgres:5432/overlord
-      - OVERLORD_CONFIG=/config/overlord.toml
-    depends_on:
-      - postgres
-
-  overlord-emule:                        # SVC-002
-    build: ./crates/nc-emule
-    ports:
-      - "13301:13301"
-      - "41000:41000/udp"    # KAD [F020]
-      - "41001:41001/tcp"    # ED2K [F021]
-    environment:
-      - OVERLORD_COORDINATOR_URL=http://coordinator:13300
-    depends_on:
-      - coordinator
-
-  overlord-mainline:                     # SVC-003
-    build: ./crates/nc-mainline
-    ports:
-      - "13302:13302"
-      - "41002:41002/udp"    # BT DHT [F022]
-      - "41002:41002/tcp"    # BEP-9 [F023]
-    environment:
-      - OVERLORD_COORDINATOR_URL=http://coordinator:13300
-    depends_on:
-      - coordinator
-
-  overlord-gnutella:                     # SVC-004
-    build: ./crates/nc-gnutella
-    ports:
-      - "13303:13303"
-      - "41003:41003/tcp"    # G2 [F024]
-    environment:
-      - OVERLORD_COORDINATOR_URL=http://coordinator:13300
-    depends_on:
-      - coordinator
-
-  overlord-ipfs:                         # SVC-005
-    build: ./crates/nc-ipfs
-    ports:
-      - "13304:13304"
-      - "41004:41004/tcp"    # libp2p [F025]
-    environment:
-      - OVERLORD_COORDINATOR_URL=http://coordinator:13300
-    depends_on:
-      - coordinator
-
-  # Download clients: add via A029 API once the stack is running.
-  # Example (Phase 9):
+Container definitions can be added later once the local service boundaries and runtime flow
+have settled.
   # aria2:
   #   image: p3terx/aria2-pro
   #   ports:
