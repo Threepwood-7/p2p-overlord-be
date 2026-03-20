@@ -11,6 +11,7 @@ import type {
 } from '$lib/shared/internal-api';
 import {
 	getAgentInterfaceReport,
+	getAgentNatStatus,
 	getAgentNetworkingConfig,
 	getAgentInterfaceState,
 	getRegistration,
@@ -20,7 +21,7 @@ import {
 	updateAgentNetworkingConfig
 } from '$lib/server/state';
 
-const CONTROL_REBIND_WAIT_MESSAGE = 'waiting for agent control rebind';
+const AGENT_RESTART_WAIT_MESSAGE = 'waiting for agent restart';
 
 async function fetchAgentStats(agent: IndexerRegistration): Promise<IndexerStats> {
 	const response = await fetch(`${agent.url}/api/internal/stats`);
@@ -63,19 +64,27 @@ function selectionMatchesReport(
 	);
 }
 
-function controlSelectionChanged(
+function networkingConfigChanged(
 	previousReport: AgentNetworkReport | null,
+	previousNatStatus: NatStatusSnapshot | null,
 	config: AgentNetworkingConfig
 ): boolean {
 	if (!previousReport) {
 		return Boolean(
 			config.control.selected_interface_name ||
 				config.control.bind_ip ||
-				config.control.selection_confirmed
+				config.control.selection_confirmed ||
+				config.p2p.selected_interface_name ||
+				config.p2p.bind_ip ||
+				config.p2p.selection_confirmed ||
+				config.nat.enabled ||
+				config.nat.igd_ip ||
+				config.nat.external_ip_override ||
+				config.nat.backend_order.some((backend) => backend !== 'upnp')
 		);
 	}
 
-	return !bindingSelectionMatchesReport(config.control, previousReport.control);
+	return !networkingConfigMatchesRuntime(config, previousReport, previousNatStatus);
 }
 
 function natConfigMatchesStatus(
@@ -159,6 +168,7 @@ export async function applyAgentInterfaceSelection(
 	}
 
 	const previousReport = getAgentInterfaceReport(indexerId);
+	const previousNatStatus = getAgentNatStatus(indexerId);
 	updateAgentNetworkingConfig(indexerId, config);
 
 	const payload: ConfigUpdate = {
@@ -183,8 +193,8 @@ export async function applyAgentInterfaceSelection(
 	try {
 		return await refreshAgentInterface(indexerId);
 	} catch (error) {
-		if (controlSelectionChanged(previousReport, config) && previousReport) {
-			storeAgentInterfaceError(indexerId, CONTROL_REBIND_WAIT_MESSAGE);
+		if (networkingConfigChanged(previousReport, previousNatStatus, config) && previousReport) {
+			storeAgentInterfaceError(indexerId, AGENT_RESTART_WAIT_MESSAGE);
 			return previousReport;
 		}
 		throw error;
