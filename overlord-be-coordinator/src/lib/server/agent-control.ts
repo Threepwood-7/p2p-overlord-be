@@ -91,7 +91,7 @@ function networkingConfigChanged(
 				config.nat.p2p.discovery_timeout_secs !== 5 ||
 				config.nat.p2p.lease_duration_secs !== 3600 ||
 				config.nat.p2p.renew_margin_secs !== 300 ||
-				config.nat.p2p.backend_order.some((backend) => backend !== 'upnp')
+				config.nat.p2p.backend_order.some((backend) => backend !== 'upnp_rupnp')
 		);
 	}
 

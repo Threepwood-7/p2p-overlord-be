@@ -15,7 +15,7 @@
 	}
 
 	function desiredNatBackend(agent: AgentInterfacesView): string {
-		return agent.config.nat.p2p.backend_order[0] ?? 'upnp';
+		return agent.config.nat.p2p.backend_order[0] ?? 'upnp_rupnp';
 	}
 
 	async function startSearch() {
@@ -245,7 +245,12 @@
 							<label>
 								NAT backend
 								<select name="nat_p2p_backend">
-									<option value="upnp" selected={desiredNatBackend(agent) === 'upnp'}>upnp</option>
+									<option value="upnp_rupnp" selected={desiredNatBackend(agent) === 'upnp_rupnp'}>
+										upnp_rupnp
+									</option>
+									<option value="upnp_igd" selected={desiredNatBackend(agent) === 'upnp_igd'}>
+										upnp_igd
+									</option>
 								</select>
 							</label>
 

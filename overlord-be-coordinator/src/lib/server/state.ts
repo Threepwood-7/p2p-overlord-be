@@ -276,7 +276,7 @@ function createDefaultP2pConfig(): AgentP2pConfig {
 function createDefaultNatP2pConfig(): AgentNatP2pConfig {
 	return {
 		enabled: false,
-		backend_order: ['upnp'],
+		backend_order: ['upnp_rupnp'],
 		igd_ip: null,
 		discovery_timeout_secs: 5,
 		lease_duration_secs: 3600,

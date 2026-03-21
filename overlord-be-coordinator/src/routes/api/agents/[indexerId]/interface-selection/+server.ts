@@ -87,7 +87,7 @@ function parseNatConfig(form: FormData): AgentNatConfig {
 	return {
 		p2p: {
 			enabled: form.get('nat_p2p_enabled') === 'on',
-			backend_order: backend ? [backend] : ['upnp'],
+			backend_order: backend ? [backend] : ['upnp_rupnp'],
 			igd_ip: normalizeOptionalString(form.get('nat_p2p_igd_ip')),
 			discovery_timeout_secs: parseIntegerField(form, 'nat_p2p_discovery_timeout_secs', 5),
 			lease_duration_secs: parseIntegerField(form, 'nat_p2p_lease_duration_secs', 3600),
