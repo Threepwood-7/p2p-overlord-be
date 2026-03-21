@@ -1,7 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 import type { SnoopEntry } from '$lib/shared/internal-api';
-import { storeSnoopEntries } from '$lib/server/state';
+import { storeSnoopEntries } from '$lib/server/snoop-store';
 
 export const POST: RequestHandler = async ({ request }) => {
 	const payload = (await request.json()) as {
@@ -12,6 +12,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		return json({ error: 'invalid snoop flush payload' }, { status: 400 });
 	}
 
-	storeSnoopEntries(payload.indexer_id, payload.entries);
+	await storeSnoopEntries(payload.indexer_id, payload.entries);
 	return json({ accepted: true }, { status: 202 });
 };

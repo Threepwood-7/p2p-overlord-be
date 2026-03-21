@@ -102,13 +102,15 @@ model SearchResult {
 }
 
 model SnoopEntry {
-  id         BigInt   @id @default(autoincrement())
   indexerId  String
   query      String
   hash       Json?
   hitCount   Int
   firstSeen  DateTime
   lastSeen   DateTime
+  lastDrainedAt DateTime?
+
+  @@unique([indexerId, query])
 }
 
 model SnoopLog {

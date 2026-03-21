@@ -269,6 +269,7 @@ export type SnoopEntry = {
 	hit_count: number;
 	first_seen: string;
 	last_seen: string;
+	last_drained_at: string | null;
 };
 
 export type PopularHash = {

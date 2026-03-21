@@ -14,8 +14,7 @@ import type {
 	PopularHash,
 	RegisterRequest,
 	ResultBatch,
-	SearchJob,
-	SnoopEntry
+	SearchJob
 } from '$lib/shared/internal-api';
 
 type SearchDispatch = {
@@ -36,7 +35,6 @@ type CoordinatorState = {
 	agentNatStatuses: Map<string, NatStatusSnapshot | null>;
 	agentInterfaceErrors: Map<string, string | null>;
 	searchJobs: Map<string, SearchDispatch>;
-	snoopEntries: Map<string, SnoopEntry[]>;
 	filesByHash: Map<string, AggregatedFile>;
 	batches: ResultBatch[];
 	popularHashes: PopularHash[];
@@ -55,7 +53,6 @@ function createState(): CoordinatorState {
 		agentNatStatuses: new Map(),
 		agentInterfaceErrors: new Map(),
 		searchJobs: new Map(),
-		snoopEntries: new Map(),
 		filesByHash: new Map(),
 		batches: [],
 		popularHashes: []
@@ -139,14 +136,6 @@ export function storeResultBatch(batch: ResultBatch): void {
 			existing.seen_in_jobs.push(batch.job_id);
 		}
 	}
-}
-
-export function storeSnoopEntries(indexerId: string, entries: SnoopEntry[]): void {
-	coordinatorState.snoopEntries.set(indexerId, entries);
-}
-
-export function restoreSnoopEntries(indexerId: string): SnoopEntry[] {
-	return coordinatorState.snoopEntries.get(indexerId) ?? [];
 }
 
 export function storeAgentInterfaceReport(indexerId: string, report: AgentNetworkReport): void {

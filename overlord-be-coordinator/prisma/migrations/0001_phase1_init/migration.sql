@@ -76,13 +76,14 @@ CREATE TABLE search_results (
 );
 
 CREATE TABLE snoop_entries (
-    id BIGSERIAL PRIMARY KEY,
     indexer_id TEXT NOT NULL,
     query TEXT NOT NULL,
     hash JSONB NULL,
     hit_count INTEGER NOT NULL,
     first_seen TIMESTAMPTZ NOT NULL,
-    last_seen TIMESTAMPTZ NOT NULL
+    last_seen TIMESTAMPTZ NOT NULL,
+    last_drained_at TIMESTAMPTZ NULL,
+    PRIMARY KEY (indexer_id, query)
 );
 
 CREATE TABLE snoop_log (

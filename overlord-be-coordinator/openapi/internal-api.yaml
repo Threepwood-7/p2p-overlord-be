@@ -620,7 +620,7 @@ components:
         config: {}
     SnoopEntry:
       type: object
-      required: [query, hash, hit_count, first_seen, last_seen]
+      required: [query, hash, hit_count, first_seen, last_seen, last_drained_at]
       properties:
         query:
           type: string
@@ -636,6 +636,10 @@ components:
         last_seen:
           type: string
           format: date-time
+        last_drained_at:
+          type: string
+          format: date-time
+          nullable: true
     PopularHash:
       type: object
       required: [hash, canonical_name, size, source_count]
