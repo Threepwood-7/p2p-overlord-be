@@ -1,5 +1,6 @@
 import { refreshAllAgentInterfaces } from '$lib/server/agent-control';
 import { getSearchCounters, listRecentSearchJobs } from '$lib/server/search-store';
+import { listRecentSnoopEntries } from '$lib/server/snoop-store';
 import { listAgentDashboard, snapshotStatus } from '$lib/server/state';
 
 export async function load() {
@@ -11,6 +12,7 @@ export async function load() {
 			...searchCounters
 		},
 		agents: listAgentDashboard(),
-		searches: await listRecentSearchJobs(8)
+		searches: await listRecentSearchJobs(8),
+		snoops: await listRecentSnoopEntries(40)
 	};
 }

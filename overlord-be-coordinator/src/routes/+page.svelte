@@ -2,13 +2,16 @@
 	import type {
 		AgentInterfacesView,
 		InterfaceBindingSelection,
-		SearchJobStatusView
+		SearchJobStatusView,
+		SnoopDashboardEntry
 	} from '$lib/shared/internal-api';
+	import { onMount } from 'svelte';
 
 	const ANY_BIND_OPTION = '__any__';
 	let query = '';
 	let searchError = '';
 	let creatingSearch = false;
+	let snoops: SnoopDashboardEntry[] = [];
 
 	function isAnyBindingOption(binding: InterfaceBindingSelection): boolean {
 		return binding.bind_iface === null && binding.bind_ip === '0.0.0.0';
@@ -16,6 +19,30 @@
 
 	function desiredNatBackend(agent: AgentInterfacesView): string {
 		return agent.config.nat.p2p.backend_order[0] ?? 'upnp_miniupnpc';
+	}
+
+	function shortIndexerId(indexerId: string): string {
+		return indexerId.slice(0, 8);
+	}
+
+	function formatSnoopDetails(entry: SnoopDashboardEntry): string {
+		switch (entry.family) {
+			case 'keyword':
+				return entry.restrictive_payload_hex
+					? `start=${entry.start_position} restrictive=${entry.restrictive_payload_hex}`
+					: `start=${entry.start_position}`;
+			case 'source':
+				return `start=${entry.start_position} size=${entry.size}`;
+			case 'notes':
+				return `size=${entry.size}`;
+		}
+	}
+
+	function formatTimestamp(value: string | null): string {
+		if (!value) {
+			return 'pending';
+		}
+		return new Date(value).toLocaleString();
 	}
 
 	async function startSearch() {
@@ -62,8 +89,35 @@
 				};
 				agents: AgentInterfacesView[];
 				searches: SearchJobStatusView[];
+				snoops: SnoopDashboardEntry[];
 		  }
 		| undefined;
+
+	$: snoops = data?.snoops ?? [];
+
+	onMount(() => {
+		let cancelled = false;
+		async function refreshSnoops() {
+			try {
+				const response = await fetch('/api/snoop');
+				if (!response.ok) {
+					return;
+				}
+				const payload = (await response.json()) as { entries: SnoopDashboardEntry[] };
+				if (!cancelled) {
+					snoops = payload.entries;
+				}
+			} catch {
+				// Keep the dashboard usable even when the background refresh fails.
+			}
+		}
+		const interval = window.setInterval(refreshSnoops, 10000);
+		refreshSnoops();
+		return () => {
+			cancelled = true;
+			window.clearInterval(interval);
+		};
+	});
 </script>
 
 <svelte:head>
@@ -105,6 +159,41 @@
 						</li>
 					{/each}
 				</ul>
+			{/if}
+		</section>
+
+		<section>
+			<h2>Harvested Kad Queries</h2>
+			<p>Auto-refreshes every 10 seconds from the persisted snoop queue.</p>
+			{#if snoops.length > 0}
+				<table>
+					<thead>
+						<tr>
+							<th>Seen</th>
+							<th>Family</th>
+							<th>Target</th>
+							<th>Details</th>
+							<th>Hits</th>
+							<th>Drained</th>
+							<th>Agent</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each snoops as snoop}
+							<tr>
+								<td>{formatTimestamp(snoop.last_seen)}</td>
+								<td>{snoop.family}</td>
+								<td><code>{snoop.target}</code></td>
+								<td>{formatSnoopDetails(snoop)}</td>
+								<td>{snoop.hit_count}</td>
+								<td>{formatTimestamp(snoop.last_drained_at)}</td>
+								<td>{snoop.hostname ?? snoop.protocol ?? 'agent'} · {shortIndexerId(snoop.indexer_id)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{:else}
+				<p>No harvested Kad queries yet.</p>
 			{/if}
 		</section>
 

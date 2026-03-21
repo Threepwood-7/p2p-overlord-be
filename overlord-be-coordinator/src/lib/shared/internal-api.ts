@@ -300,6 +300,12 @@ export type NotesSnoopEntry = {
 
 export type SnoopEntry = KeywordSnoopEntry | SourceSnoopEntry | NotesSnoopEntry;
 
+export type SnoopDashboardEntry = SnoopEntry & {
+	indexer_id: string;
+	hostname: string | null;
+	protocol: Protocol | null;
+};
+
 export type PopularHash = {
 	hash: HashType;
 	canonical_name: string;

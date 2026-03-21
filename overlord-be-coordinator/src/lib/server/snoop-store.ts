@@ -1,5 +1,5 @@
 import { getDb } from '$lib/server/db';
-import type { SnoopEntry } from '$lib/shared/internal-api';
+import type { SnoopDashboardEntry, SnoopEntry } from '$lib/shared/internal-api';
 
 function toSnoopEntry(entry: {
 	family: string;
@@ -131,4 +131,35 @@ export async function restoreSnoopEntries(indexerId: string): Promise<SnoopEntry
 		orderBy: [{ hitCount: 'desc' }, { lastSeen: 'desc' }]
 	});
 	return entries.map(toSnoopEntry);
+}
+
+/**
+ * Lists recently harvested search queries across all indexers for the dashboard.
+ */
+export async function listRecentSnoopEntries(limit = 25): Promise<SnoopDashboardEntry[]> {
+	const db = getDb();
+	const entries = await db.snoopEntry.findMany({
+		orderBy: [{ lastSeen: 'desc' }, { hitCount: 'desc' }],
+		take: limit
+	});
+	const indexerIds = [...new Set(entries.map((entry) => entry.indexerId))];
+	const registries = indexerIds.length
+		? await db.indexerRegistry.findMany({
+				where: {
+					id: {
+						in: indexerIds
+					}
+				}
+			})
+		: [];
+	const registryById = new Map(registries.map((registry) => [registry.id, registry]));
+	return entries.map((entry) => {
+		const registry = registryById.get(entry.indexerId);
+		return {
+			...toSnoopEntry(entry),
+			indexer_id: entry.indexerId,
+			hostname: registry?.hostname ?? null,
+			protocol: (registry?.protocol as SnoopDashboardEntry['protocol']) ?? null
+		};
+	});
 }
