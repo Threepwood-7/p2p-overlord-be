@@ -33,10 +33,84 @@ export type FileRecord = {
 	sources: Source[];
 };
 
+export type SearchKind = 'keyword' | 'source' | 'notes';
+
 export type SearchJob = {
 	job_id: string;
-	query: string;
+	kind: SearchKind;
+	query: string | null;
+	file_hash: HashType | null;
+	file_size: number | null;
 	callback_url: string;
+};
+
+export type SearchEventStatus = 'started' | 'batch_received' | 'completed' | 'failed' | 'cancelled';
+
+export type SearchEvent = {
+	job_id: string;
+	indexer_id: string;
+	status: SearchEventStatus;
+	result_count: number | null;
+	batch_count: number | null;
+	error: string | null;
+};
+
+export type SearchCancelRequest = {
+	job_id: string;
+};
+
+export type SearchRequest = {
+	protocol: 'kad2';
+	kind: 'keyword';
+	query: string;
+};
+
+export type SearchDispatchStatus =
+	| 'queued'
+	| 'dispatch_failed'
+	| 'dispatched'
+	| 'active'
+	| 'completed'
+	| 'failed'
+	| 'cancelled';
+
+export type SearchJobStatus =
+	| 'queued'
+	| 'active'
+	| 'cancelling'
+	| 'completed'
+	| 'completed_with_errors'
+	| 'failed'
+	| 'cancelled';
+
+export type SearchDispatchView = {
+	indexer_id: string;
+	status: SearchDispatchStatus;
+	result_count: number;
+	batch_count: number;
+	created_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+	last_error: string | null;
+};
+
+export type SearchJobStatusView = {
+	job_id: string;
+	protocol: Protocol;
+	kind: SearchKind;
+	query: string | null;
+	file_hash: HashType | null;
+	file_size: number | null;
+	status: SearchJobStatus;
+	created_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+	cancel_requested_at: string | null;
+	result_count: number;
+	dispatched_to: string[];
+	last_error: string | null;
+	dispatches: SearchDispatchView[];
+	results: FileRecord[];
 };
 
 export type ResultBatch = {

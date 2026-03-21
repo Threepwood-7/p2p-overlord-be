@@ -1,7 +1,14 @@
 <script lang="ts">
-	import type { AgentInterfacesView, InterfaceBindingSelection } from '$lib/shared/internal-api';
+	import type {
+		AgentInterfacesView,
+		InterfaceBindingSelection,
+		SearchJobStatusView
+	} from '$lib/shared/internal-api';
 
 	const ANY_BIND_OPTION = '__any__';
+	let query = '';
+	let searchError = '';
+	let creatingSearch = false;
 
 	function isAnyBindingOption(binding: InterfaceBindingSelection): boolean {
 		return binding.bind_iface === null && binding.bind_ip === '0.0.0.0';
@@ -11,15 +18,50 @@
 		return agent.config.nat.p2p.backend_order[0] ?? 'upnp';
 	}
 
+	async function startSearch() {
+		const trimmed = query.trim();
+		if (!trimmed) {
+			searchError = 'Enter a search query first.';
+			return;
+		}
+
+		creatingSearch = true;
+		searchError = '';
+		try {
+			const response = await fetch('/api/search', {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json'
+				},
+				body: JSON.stringify({
+					protocol: 'kad2',
+					kind: 'keyword',
+					query: trimmed
+				})
+			});
+			if (!response.ok) {
+				const payload = (await response.json()) as { error?: string };
+				throw new Error(payload.error ?? `search request failed with ${response.status}`);
+			}
+			const payload = (await response.json()) as SearchJobStatusView;
+			window.location.href = `/search/${payload.job_id}`;
+		} catch (error) {
+			searchError = error instanceof Error ? error.message : String(error);
+		} finally {
+			creatingSearch = false;
+		}
+	}
+
 	export let data:
 		| {
 				status: {
 					registered_agents: number;
 					search_jobs: number;
 					file_count: number;
-					result_batches: number;
+					search_results: number;
 				};
 				agents: AgentInterfacesView[];
+				searches: SearchJobStatusView[];
 		  }
 		| undefined;
 </script>
@@ -37,8 +79,34 @@
 			<li>Registered agents: {data.status.registered_agents}</li>
 			<li>Search jobs: {data.status.search_jobs}</li>
 			<li>Indexed files: {data.status.file_count}</li>
-			<li>Result batches: {data.status.result_batches}</li>
+			<li>Search results: {data.status.search_results}</li>
 		</ul>
+
+		<section>
+			<h2>Kad Search</h2>
+			<label>
+				Keyword query
+				<input bind:value={query} placeholder="ubuntu iso" />
+			</label>
+			<button type="button" on:click={startSearch} disabled={creatingSearch}>
+				{creatingSearch ? 'Starting...' : 'Start search'}
+			</button>
+			{#if searchError}
+				<p>{searchError}</p>
+			{/if}
+
+			{#if data.searches.length > 0}
+				<h3>Recent jobs</h3>
+				<ul>
+					{#each data.searches as search}
+						<li>
+							<a href={`/search/${search.job_id}`}>{search.query ?? search.job_id}</a>
+							· {search.status} · results: {search.result_count}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 
 		{#if data.agents.length > 0}
 			<section>

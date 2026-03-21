@@ -15,6 +15,7 @@ model File {
   hashes      FileHash[]
   tags        FileTag[]
   sources     Source[]
+  searchLinks SearchResult[]
 }
 
 model FileHash {
@@ -55,11 +56,49 @@ model Source {
 }
 
 model SearchJob {
-  id           String   @id
-  query        String
-  protocol     String
-  createdAt    DateTime @default(now())
-  dispatchedTo Json
+  id                String         @id
+  protocol          String
+  kind              String
+  query             String?
+  fileHash          Json?
+  fileSize          BigInt?
+  status            String
+  resultCount       Int            @default(0)
+  lastError         String?
+  createdAt         DateTime       @default(now())
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  cancelRequestedAt DateTime?
+  dispatches        SearchDispatch[]
+  results           SearchResult[]
+}
+
+model SearchDispatch {
+  id          BigInt    @id @default(autoincrement())
+  jobId       String
+  indexerId   String
+  status      String
+  resultCount Int       @default(0)
+  batchCount  Int       @default(0)
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  job         SearchJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, indexerId])
+}
+
+model SearchResult {
+  jobId      String
+  fileId     BigInt
+  seenCount  Int      @default(1)
+  firstSeen  DateTime @default(now())
+  lastSeen   DateTime @default(now())
+  job        SearchJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  file       File      @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, fileId])
 }
 
 model SnoopEntry {

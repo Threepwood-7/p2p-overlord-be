@@ -37,6 +37,18 @@ paths:
       responses:
         '202':
           description: Accepted result batch
+  /api/internal/search-events:
+    post:
+      operationId: ingestSearchEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchEvent'
+      responses:
+        '202':
+          description: Accepted search lifecycle event
   /api/internal/snoop-flush:
     post:
       operationId: flushSnoop
@@ -207,15 +219,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Source'
+    SearchKind:
+      type: string
+      enum: [keyword, source, notes]
     SearchJob:
       type: object
-      required: [job_id, query, callback_url]
+      required: [job_id, kind, query, file_hash, file_size, callback_url]
       properties:
         job_id:
           type: string
           format: uuid
+        kind:
+          $ref: '#/components/schemas/SearchKind'
         query:
           type: string
+          nullable: true
+        file_hash:
+          allOf:
+            - $ref: '#/components/schemas/HashType'
+          nullable: true
+        file_size:
+          type: integer
+          format: int64
+          nullable: true
         callback_url:
           type: string
     ResultBatch:
@@ -235,6 +261,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FileRecord'
+    SearchEventStatus:
+      type: string
+      enum: [started, batch_received, completed, failed, cancelled]
+    SearchEvent:
+      type: object
+      required: [job_id, indexer_id, status, result_count, batch_count, error]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        indexer_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/SearchEventStatus'
+        result_count:
+          type: integer
+          nullable: true
+        batch_count:
+          type: integer
+          nullable: true
+        error:
+          type: string
+          nullable: true
+    SearchCancelRequest:
+      type: object
+      required: [job_id]
+      properties:
+        job_id:
+          type: string
+          format: uuid
     InterfaceAddressFamily:
       type: string
       enum: [ipv4, ipv6]

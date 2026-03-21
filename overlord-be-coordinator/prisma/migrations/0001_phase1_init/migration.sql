@@ -38,10 +38,41 @@ CREATE TABLE sources (
 
 CREATE TABLE search_jobs (
     id TEXT PRIMARY KEY,
-    query TEXT NOT NULL,
     protocol TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    query TEXT NULL,
+    file_hash JSONB NULL,
+    file_size BIGINT NULL,
+    status TEXT NOT NULL,
+    result_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    dispatched_to JSONB NOT NULL DEFAULT '[]'::jsonb
+    started_at TIMESTAMPTZ NULL,
+    finished_at TIMESTAMPTZ NULL,
+    cancel_requested_at TIMESTAMPTZ NULL
+);
+
+CREATE TABLE search_dispatches (
+    id BIGSERIAL PRIMARY KEY,
+    job_id TEXT NOT NULL REFERENCES search_jobs(id) ON DELETE CASCADE,
+    indexer_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    result_count INTEGER NOT NULL DEFAULT 0,
+    batch_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ NULL,
+    finished_at TIMESTAMPTZ NULL,
+    UNIQUE (job_id, indexer_id)
+);
+
+CREATE TABLE search_results (
+    job_id TEXT NOT NULL REFERENCES search_jobs(id) ON DELETE CASCADE,
+    file_id BIGINT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    seen_count INTEGER NOT NULL DEFAULT 1,
+    first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (job_id, file_id)
 );
 
 CREATE TABLE snoop_entries (

@@ -1,10 +1,11 @@
 import { json } from '@sveltejs/kit';
 
-import { listFiles, snapshotStatus } from '$lib/server/state';
+import { getSearchCounters } from '$lib/server/search-store';
+import { snapshotStatus } from '$lib/server/state';
 
-export function GET() {
+export async function GET() {
 	return json({
 		...snapshotStatus(),
-		files: listFiles()
+		...(await getSearchCounters())
 	});
 }
