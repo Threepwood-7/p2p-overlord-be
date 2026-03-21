@@ -15,9 +15,14 @@ See [OVERLORD.md](OVERLORD.md) for the full specification.
 
 ## Architecture
 
+### Coordinator  (SVC-001)
+
 ```mermaid
 flowchart TD
     Browser["🌐 Browser"]
+    Agents["Indexer Agents\nSVC-002 … SVC-005"]
+
+    Browser -->|"SSR pages · REST queries · SSE live feed"| UI
 
     subgraph COORD["SVC-001 · overlord-be-coordinator · :13300  ·  SvelteKit / Node.js"]
         direction TB
@@ -27,47 +32,12 @@ flowchart TD
         Dedup["Dedup Engine\ncross-protocol · cross-torrent"]
         DLM["Download Manager\nMetalink 4 / RFC 5854"]
         DB[("PostgreSQL · Prisma")]
+
         UI <--> API
         API <--> DB
         API --> Dispatch
         Dedup <--> DB
-    end
-
-    subgraph AGENTS["Rust Indexer Agents  ·  stateless  ·  only need OVERLORD_COORDINATOR_URL"]
-        direction TB
-
-        subgraph SVC002["SVC-002 · overlord-agent-emule · :13301"]
-            direction LR
-            E["IndexerService"] --> E_KAD["KAD crawler\n:41000 UDP"]
-            E --> E_ED2K["ED2K client\n:41001 TCP"]
-            E --> E_SQ["snoop queue"]
-        end
-
-        subgraph SVC003["SVC-003 · overlord-agent-mainline · :13302"]
-            direction LR
-            M["IndexerService"] --> M_DHT["BT DHT crawler\n:41002 UDP+TCP"]
-            M --> M_SQ["snoop queue"]
-        end
-
-        subgraph SVC004["SVC-004 · overlord-agent-gnutella · :13303"]
-            direction LR
-            G["IndexerService"] --> G_G2["Gnutella G2\n:41003 TCP"]
-            G --> G_SQ["snoop queue"]
-        end
-
-        subgraph SVC005["SVC-005 · overlord-agent-ipfs · :13304"]
-            direction LR
-            I["IndexerService"] --> I_LP["libp2p / IPFS\n:41004 TCP"]
-            I --> I_SQ["snoop queue"]
-        end
-    end
-
-    subgraph NETWORKS["P2P Networks  ·  passive crawl 24/7  ·  active search on demand  ·  DHT seeding"]
-        direction TB
-        NET_E["eMule KAD / ED2K"]
-        NET_B["BitTorrent DHT"]
-        NET_G["Gnutella 2"]
-        NET_I["IPFS"]
+        API --> DLM
     end
 
     subgraph DLC["Download Clients"]
@@ -76,35 +46,72 @@ flowchart TD
         qbt["qBittorrent  ·  HTTP API"]
     end
 
-    %% ── Browser ↔ Coordinator ───────────────────────────────────────────────
-    Browser -->|"SSR pages · REST queries · SSE live feed"| UI
+    Dispatch -->|"search · enrich · config-update · seed-popular"| Agents
+    Agents   -->|"results · enrich-result · register · snoop-flush"| API
+    Agents   -->|"results · enrich-result"| Dedup
 
-    %% ── Coordinator → Agents  (commands) ───────────────────────────────────
-    Dispatch -->|"search · enrich · config-update · seed-popular"| E
-    Dispatch -->|"search · enrich · config-update · seed-popular"| M
-    Dispatch -->|"search · enrich · config-update"| G
-    Dispatch -->|"search · enrich · config-update"| I
+    DLM -->|"Metalink 4"| aria2
+    DLM -->|"Metalink 4"| qbt
+```
 
-    %% ── Agents → Coordinator  (results & control) ──────────────────────────
-    E     -->|"results · enrich-result · register"| Dedup
-    E_SQ  -->|"snoop-flush"| API
-    M     -->|"results · enrich-result · register"| Dedup
-    M_SQ  -->|"snoop-flush"| API
-    G     -->|"results · register"| Dedup
-    G_SQ  -->|"snoop-flush"| API
-    I     -->|"results · register"| Dedup
-    I_SQ  -->|"snoop-flush"| API
+### Indexer Agents  (SVC-002 … SVC-005)
 
-    %% ── Agents ↔ P2P Networks ───────────────────────────────────────────────
+```mermaid
+flowchart TD
+    COORD["SVC-001 · overlord-be-coordinator\n:13300"]
+
+    subgraph SVC002["SVC-002 · overlord-agent-emule · :13301"]
+        direction LR
+        E["IndexerService"] --> E_KAD["KAD crawler\n:41000 UDP"]
+        E --> E_ED2K["ED2K client\n:41001 TCP"]
+        E --> E_SQ["snoop queue"]
+    end
+
+    subgraph SVC003["SVC-003 · overlord-agent-mainline · :13302"]
+        direction LR
+        M["IndexerService"] --> M_DHT["BT DHT crawler\n:41002 UDP+TCP"]
+        M --> M_SQ["snoop queue"]
+    end
+
+    subgraph SVC004["SVC-004 · overlord-agent-gnutella · :13303"]
+        direction LR
+        G["IndexerService"] --> G_G2["Gnutella G2\n:41003 TCP"]
+        G --> G_SQ["snoop queue"]
+    end
+
+    subgraph SVC005["SVC-005 · overlord-agent-ipfs · :13304"]
+        direction LR
+        I["IndexerService"] --> I_LP["libp2p / IPFS\n:41004 TCP"]
+        I --> I_SQ["snoop queue"]
+    end
+
+    subgraph NETWORKS["P2P Networks  ·  passive crawl 24/7  ·  active search  ·  DHT seeding"]
+        direction TB
+        NET_E["eMule KAD / ED2K"]
+        NET_B["BitTorrent DHT"]
+        NET_G["Gnutella 2"]
+        NET_I["IPFS"]
+    end
+
+    COORD -->|"search · enrich · config-update · seed-popular"| E
+    COORD -->|"search · enrich · config-update · seed-popular"| M
+    COORD -->|"search · enrich · config-update"| G
+    COORD -->|"search · enrich · config-update"| I
+
+    E    -->|"results · enrich-result · register"| COORD
+    E_SQ -->|"snoop-flush"| COORD
+    M    -->|"results · enrich-result · register"| COORD
+    M_SQ -->|"snoop-flush"| COORD
+    G    -->|"results · register"| COORD
+    G_SQ -->|"snoop-flush"| COORD
+    I    -->|"results · register"| COORD
+    I_SQ -->|"snoop-flush"| COORD
+
     E_KAD  <--> NET_E
     E_ED2K <--> NET_E
     M_DHT  <--> NET_B
     G_G2   <--> NET_G
     I_LP   <--> NET_I
-
-    %% ── Download ────────────────────────────────────────────────────────────
-    DLM -->|"Metalink 4"| aria2
-    DLM -->|"Metalink 4"| qbt
 ```
 
 ---
