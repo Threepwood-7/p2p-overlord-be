@@ -1,17 +1,14 @@
 <script lang="ts">
-	import type {
-		AgentInterfacesView,
-		InterfaceBindingSelection
-	} from '$lib/shared/internal-api';
+	import type { AgentInterfacesView, InterfaceBindingSelection } from '$lib/shared/internal-api';
 
 	const ANY_BIND_OPTION = '__any__';
 
 	function isAnyBindingOption(binding: InterfaceBindingSelection): boolean {
-		return binding.selected_interface_name === null && binding.bind_ip === '0.0.0.0';
+		return binding.bind_iface === null && binding.bind_ip === '0.0.0.0';
 	}
 
 	function desiredNatBackend(agent: AgentInterfacesView): string {
-		return agent.config.nat.backend_order[0] ?? 'upnp';
+		return agent.config.nat.p2p.backend_order[0] ?? 'upnp';
 	}
 
 	export let data:
@@ -53,15 +50,17 @@
 						<p>Registered URL: {agent.registration.url}</p>
 						<p>
 							Control: {agent.report?.control.state ?? 'pending'} · ready:
-							{agent.report?.control.ready ? 'yes' : 'no'} · selected:
-							{agent.report?.control.selected_interface_name ?? 'none'} · bind:
-							{agent.report?.control.resolved_bind_ip ?? 'none'}
+							{agent.report?.control.ready ? 'yes' : 'no'} · iface:
+							{agent.report?.control.bind_iface ?? 'none'} · bind:
+							{agent.report?.control.resolved_bind_ip ?? 'none'} · port:
+							{agent.config.control.listen_port}
 						</p>
 						<p>
 							P2P: {agent.report?.p2p.state ?? 'pending'} · ready:
-							{agent.report?.p2p.ready ? 'yes' : 'no'} · selected:
-							{agent.report?.p2p.selected_interface_name ?? 'none'} · bind:
-							{agent.report?.p2p.resolved_bind_ip ?? 'none'}
+							{agent.report?.p2p.ready ? 'yes' : 'no'} · iface:
+							{agent.report?.p2p.bind_iface ?? 'none'} · bind:
+							{agent.report?.p2p.resolved_bind_ip ?? 'none'} · kad:
+							{agent.config.p2p.kad.listen_port} · ed2k: {agent.config.p2p.ed2k.listen_port}
 						</p>
 						{#if agent.last_error}
 							<p>Error: {agent.last_error}</p>
@@ -73,19 +72,13 @@
 						>
 							<label>
 								Control interface
-								<select name="control_selected_interface_name">
+								<select name="control_bind_iface">
 									<option value="">-- choose --</option>
-									<option
-										value={ANY_BIND_OPTION}
-										selected={isAnyBindingOption(agent.config.control)}
-									>
+									<option value={ANY_BIND_OPTION} selected={isAnyBindingOption(agent.config.control)}>
 										Any (0.0.0.0)
 									</option>
 									{#each agent.report?.interfaces ?? [] as iface}
-										<option
-											value={iface.name}
-											selected={iface.name === agent.config.control.selected_interface_name}
-										>
+										<option value={iface.name} selected={iface.name === agent.config.control.bind_iface}>
 											{iface.name}
 											{#if iface.is_vpn_candidate} (vpn){/if}
 											{#if iface.has_default_route} (default-route){/if}
@@ -100,6 +93,11 @@
 							</label>
 
 							<label>
+								Control listen port
+								<input name="control_listen_port" value={agent.config.control.listen_port} />
+							</label>
+
+							<label>
 								<input
 									type="checkbox"
 									name="control_selection_confirmed"
@@ -110,19 +108,13 @@
 
 							<label>
 								P2P interface
-								<select name="p2p_selected_interface_name">
+								<select name="p2p_bind_iface">
 									<option value="">-- choose --</option>
-									<option
-										value={ANY_BIND_OPTION}
-										selected={isAnyBindingOption(agent.config.p2p)}
-									>
+									<option value={ANY_BIND_OPTION} selected={isAnyBindingOption(agent.config.p2p)}>
 										Any (0.0.0.0)
 									</option>
 									{#each agent.report?.interfaces ?? [] as iface}
-										<option
-											value={iface.name}
-											selected={iface.name === agent.config.p2p.selected_interface_name}
-										>
+										<option value={iface.name} selected={iface.name === agent.config.p2p.bind_iface}>
 											{iface.name}
 											{#if iface.is_vpn_candidate} (vpn){/if}
 											{#if iface.has_default_route} (default-route){/if}
@@ -137,6 +129,16 @@
 							</label>
 
 							<label>
+								Kad listen port
+								<input name="p2p_kad_listen_port" value={agent.config.p2p.kad.listen_port} />
+							</label>
+
+							<label>
+								eD2k listen port
+								<input name="p2p_ed2k_listen_port" value={agent.config.p2p.ed2k.listen_port} />
+							</label>
+
+							<label>
 								<input
 									type="checkbox"
 									name="p2p_selection_confirmed"
@@ -146,10 +148,10 @@
 							</label>
 
 							<p>
-								NAT desired: {agent.config.nat.enabled ? 'enabled' : 'disabled'} · backend:
+								NAT desired: {agent.config.nat.p2p.enabled ? 'enabled' : 'disabled'} · backend:
 								{desiredNatBackend(agent)} · IGD:
-								{agent.config.nat.igd_ip ?? 'auto'} · external IP:
-								{agent.config.nat.external_ip_override ?? 'auto'}
+								{agent.config.nat.p2p.igd_ip ?? 'auto'} · external IP:
+								{agent.config.nat.p2p.external_ip_override ?? 'auto'}
 							</p>
 							<p>
 								NAT live: {agent.nat?.enabled ? 'enabled' : 'disabled'} · backend:
@@ -164,27 +166,55 @@
 							{/if}
 
 							<label>
-								<input type="checkbox" name="nat_enabled" checked={agent.config.nat.enabled} />
-								Enable UPnP/NAT
+								<input
+									type="checkbox"
+									name="nat_p2p_enabled"
+									checked={agent.config.nat.p2p.enabled}
+								/>
+								Enable UPnP/NAT for P2P
 							</label>
 
 							<label>
 								NAT backend
-								<select name="nat_backend">
+								<select name="nat_p2p_backend">
 									<option value="upnp" selected={desiredNatBackend(agent) === 'upnp'}>upnp</option>
 								</select>
 							</label>
 
 							<label>
 								IGD IP override
-								<input name="nat_igd_ip" value={agent.config.nat.igd_ip ?? ''} />
+								<input name="nat_p2p_igd_ip" value={agent.config.nat.p2p.igd_ip ?? ''} />
+							</label>
+
+							<label>
+								Discovery timeout
+								<input
+									name="nat_p2p_discovery_timeout_secs"
+									value={agent.config.nat.p2p.discovery_timeout_secs}
+								/>
+							</label>
+
+							<label>
+								Lease duration
+								<input
+									name="nat_p2p_lease_duration_secs"
+									value={agent.config.nat.p2p.lease_duration_secs}
+								/>
+							</label>
+
+							<label>
+								Renew margin
+								<input
+									name="nat_p2p_renew_margin_secs"
+									value={agent.config.nat.p2p.renew_margin_secs}
+								/>
 							</label>
 
 							<label>
 								External IP override
 								<input
-									name="nat_external_ip_override"
-									value={agent.config.nat.external_ip_override ?? ''}
+									name="nat_p2p_external_ip_override"
+									value={agent.config.nat.p2p.external_ip_override ?? ''}
 								/>
 							</label>
 

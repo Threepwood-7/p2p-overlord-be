@@ -1331,13 +1331,23 @@ enabled                            = false    # [F033] set true to enforce login
 
 # ──────────────────────────────────────────────────────────────────
 [emule]                                       # pushed to all SVC-002 instances [F014]
-rest_addr                          = "0.0.0.0:13301"
-kad_bind_addr                      = "0.0.0.0:41000"
-ed2k_bind_addr                     = "0.0.0.0:41001"
+[emule.control]
+listen_port                        = 13301
+
+[emule.p2p]
+bind_iface                         = ""
+bind_ip                            = ""
+
+[emule.p2p.kad]
+listen_port                        = 41000
 nodes_dat_path                     = "./nodes.dat"
 servers_met_path                   = "./servers.met"
 routing_table_max                  = 12000
 obfuscation                        = true
+
+[emule.p2p.ed2k]
+listen_port                        = 41001
+
 ed2k_server_pool                   = 5
 
 [emule.snoop_queue]

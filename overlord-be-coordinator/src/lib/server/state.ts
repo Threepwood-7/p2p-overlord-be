@@ -1,7 +1,12 @@
 import type {
+	AgentControlConfig,
+	AgentEd2kConfig,
+	AgentKadConfig,
 	AgentNetworkReport,
 	AgentNatConfig,
+	AgentNatP2pConfig,
 	AgentNetworkingConfig,
+	AgentP2pConfig,
 	InterfaceBindingSelection,
 	FileRecord,
 	IndexerRegistration,
@@ -235,25 +240,61 @@ function dedupeSources(
 
 function createEmptyBindingSelection(): InterfaceBindingSelection {
 	return {
-		selected_interface_name: null,
+		bind_iface: null,
 		bind_ip: null,
 		selection_confirmed: false
 	};
 }
 
-function createDefaultNatConfig(): AgentNatConfig {
+function createDefaultControlConfig(): AgentControlConfig {
+	return {
+		...createEmptyBindingSelection(),
+		listen_port: 13301
+	};
+}
+
+function createDefaultKadConfig(): AgentKadConfig {
+	return {
+		listen_port: 41000
+	};
+}
+
+function createDefaultEd2kConfig(): AgentEd2kConfig {
+	return {
+		listen_port: 41001
+	};
+}
+
+function createDefaultP2pConfig(): AgentP2pConfig {
+	return {
+		...createEmptyBindingSelection(),
+		kad: createDefaultKadConfig(),
+		ed2k: createDefaultEd2kConfig()
+	};
+}
+
+function createDefaultNatP2pConfig(): AgentNatP2pConfig {
 	return {
 		enabled: false,
 		backend_order: ['upnp'],
 		igd_ip: null,
+		discovery_timeout_secs: 5,
+		lease_duration_secs: 3600,
+		renew_margin_secs: 300,
 		external_ip_override: null
+	};
+}
+
+function createDefaultNatConfig(): AgentNatConfig {
+	return {
+		p2p: createDefaultNatP2pConfig()
 	};
 }
 
 function createEmptyConfig(): AgentNetworkingConfig {
 	return {
-		control: createEmptyBindingSelection(),
-		p2p: createEmptyBindingSelection(),
+		control: createDefaultControlConfig(),
+		p2p: createDefaultP2pConfig(),
 		nat: createDefaultNatConfig()
 	};
 }

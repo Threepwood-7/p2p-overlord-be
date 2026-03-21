@@ -65,14 +65,14 @@ export type AgentInterface = {
 export type InterfaceSelectionState = 'pending' | 'confirmed' | 'applied' | 'error';
 
 export type InterfaceBindingSelection = {
-	selected_interface_name: string | null;
+	bind_iface: string | null;
 	bind_ip: string | null;
 	selection_confirmed: boolean;
 };
 
 export type InterfaceBindingReport = {
 	recommended_interface_name: string | null;
-	selected_interface_name: string | null;
+	bind_iface: string | null;
 	resolved_bind_ip: string | null;
 	selection_confirmed: boolean;
 	ready: boolean;
@@ -86,16 +86,46 @@ export type AgentNetworkReport = {
 	p2p: InterfaceBindingReport;
 };
 
-export type AgentNatConfig = {
+export type AgentControlConfig = {
+	bind_iface: string | null;
+	bind_ip: string | null;
+	selection_confirmed: boolean;
+	listen_port: number;
+};
+
+export type AgentKadConfig = {
+	listen_port: number;
+};
+
+export type AgentEd2kConfig = {
+	listen_port: number;
+};
+
+export type AgentP2pConfig = {
+	bind_iface: string | null;
+	bind_ip: string | null;
+	selection_confirmed: boolean;
+	kad: AgentKadConfig;
+	ed2k: AgentEd2kConfig;
+};
+
+export type AgentNatP2pConfig = {
 	enabled: boolean;
 	backend_order: string[];
 	igd_ip: string | null;
+	discovery_timeout_secs: number;
+	lease_duration_secs: number;
+	renew_margin_secs: number;
 	external_ip_override: string | null;
 };
 
+export type AgentNatConfig = {
+	p2p: AgentNatP2pConfig;
+};
+
 export type AgentNetworkingConfig = {
-	control: InterfaceBindingSelection;
-	p2p: InterfaceBindingSelection;
+	control: AgentControlConfig;
+	p2p: AgentP2pConfig;
 	nat: AgentNatConfig;
 };
 

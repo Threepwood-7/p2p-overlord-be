@@ -271,9 +271,9 @@ components:
       enum: [pending, confirmed, applied, error]
     InterfaceBindingSelection:
       type: object
-      required: [selected_interface_name, bind_ip, selection_confirmed]
+      required: [bind_iface, bind_ip, selection_confirmed]
       properties:
-        selected_interface_name:
+        bind_iface:
           type: string
           nullable: true
         bind_ip:
@@ -286,7 +286,7 @@ components:
       required:
         [
           recommended_interface_name,
-          selected_interface_name,
+          bind_iface,
           resolved_bind_ip,
           selection_confirmed,
           ready,
@@ -297,7 +297,7 @@ components:
         recommended_interface_name:
           type: string
           nullable: true
-        selected_interface_name:
+        bind_iface:
           type: string
           nullable: true
         resolved_bind_ip:
@@ -324,9 +324,60 @@ components:
           $ref: '#/components/schemas/InterfaceBindingReport'
         p2p:
           $ref: '#/components/schemas/InterfaceBindingReport'
-    AgentNatConfig:
+    AgentControlConfig:
       type: object
-      required: [enabled, backend_order, igd_ip, external_ip_override]
+      required: [bind_iface, bind_ip, selection_confirmed, listen_port]
+      properties:
+        bind_iface:
+          type: string
+          nullable: true
+        bind_ip:
+          type: string
+          nullable: true
+        selection_confirmed:
+          type: boolean
+        listen_port:
+          type: integer
+    AgentKadConfig:
+      type: object
+      required: [listen_port]
+      properties:
+        listen_port:
+          type: integer
+    AgentEd2kConfig:
+      type: object
+      required: [listen_port]
+      properties:
+        listen_port:
+          type: integer
+    AgentP2pConfig:
+      type: object
+      required: [bind_iface, bind_ip, selection_confirmed, kad, ed2k]
+      properties:
+        bind_iface:
+          type: string
+          nullable: true
+        bind_ip:
+          type: string
+          nullable: true
+        selection_confirmed:
+          type: boolean
+        kad:
+          $ref: '#/components/schemas/AgentKadConfig'
+        ed2k:
+          $ref: '#/components/schemas/AgentEd2kConfig'
+    AgentNatP2pConfig:
+      type: object
+      required:
+        [
+          enabled,
+          backend_order,
+          igd_ip,
+          discovery_timeout_secs,
+          lease_duration_secs,
+          renew_margin_secs,
+          external_ip_override
+        ]
       properties:
         enabled:
           type: boolean
@@ -337,17 +388,29 @@ components:
         igd_ip:
           type: string
           nullable: true
+        discovery_timeout_secs:
+          type: integer
+        lease_duration_secs:
+          type: integer
+        renew_margin_secs:
+          type: integer
         external_ip_override:
           type: string
           nullable: true
+    AgentNatConfig:
+      type: object
+      required: [p2p]
+      properties:
+        p2p:
+          $ref: '#/components/schemas/AgentNatP2pConfig'
     AgentNetworkingConfig:
       type: object
       required: [control, p2p, nat]
       properties:
         control:
-          $ref: '#/components/schemas/InterfaceBindingSelection'
+          $ref: '#/components/schemas/AgentControlConfig'
         p2p:
-          $ref: '#/components/schemas/InterfaceBindingSelection'
+          $ref: '#/components/schemas/AgentP2pConfig'
         nat:
           $ref: '#/components/schemas/AgentNatConfig'
     SelectedGateway:

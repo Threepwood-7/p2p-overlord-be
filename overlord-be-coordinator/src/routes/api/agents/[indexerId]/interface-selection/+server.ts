@@ -1,8 +1,10 @@
 import { json, redirect, type RequestHandler } from '@sveltejs/kit';
 
 import type {
+	AgentControlConfig,
 	AgentNatConfig,
 	AgentNetworkingConfig,
+	AgentP2pConfig,
 	InterfaceBindingSelection,
 	Protocol
 } from '$lib/shared/internal-api';
@@ -19,6 +21,19 @@ function normalizeOptionalString(value: FormDataEntryValue | null): string | nul
 	return trimmed.length > 0 ? trimmed : null;
 }
 
+function parseIntegerField(form: FormData, name: string, fallback: number): number {
+	const raw = form.get(name);
+	if (typeof raw !== 'string') {
+		return fallback;
+	}
+	const trimmed = raw.trim();
+	if (!trimmed) {
+		return fallback;
+	}
+	const parsed = Number.parseInt(trimmed, 10);
+	return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 async function applySelection(
 	indexerId: string,
 	protocol: Protocol,
@@ -29,30 +44,56 @@ async function applySelection(
 }
 
 function parseBindingSelection(form: FormData, prefix: string): InterfaceBindingSelection {
-	const selectedInterfaceName = normalizeOptionalString(form.get(`${prefix}_selected_interface_name`));
+	const bindIface = normalizeOptionalString(form.get(`${prefix}_bind_iface`));
 	const bindIp = normalizeOptionalString(form.get(`${prefix}_bind_ip`));
-	if (selectedInterfaceName === ANY_BIND_OPTION) {
+	if (bindIface === ANY_BIND_OPTION) {
 		return {
-			selected_interface_name: null,
+			bind_iface: null,
 			bind_ip: bindIp ?? '0.0.0.0',
 			selection_confirmed: form.get(`${prefix}_selection_confirmed`) === 'on'
 		};
 	}
 
 	return {
-		selected_interface_name: selectedInterfaceName,
+		bind_iface: bindIface,
 		bind_ip: bindIp,
 		selection_confirmed: form.get(`${prefix}_selection_confirmed`) === 'on'
 	};
 }
 
-function parseNatConfig(form: FormData): AgentNatConfig {
-	const backend = normalizeOptionalString(form.get('nat_backend'));
+function parseControlConfig(form: FormData): AgentControlConfig {
+	const binding = parseBindingSelection(form, 'control');
 	return {
-		enabled: form.get('nat_enabled') === 'on',
-		backend_order: backend ? [backend] : ['upnp'],
-		igd_ip: normalizeOptionalString(form.get('nat_igd_ip')),
-		external_ip_override: normalizeOptionalString(form.get('nat_external_ip_override'))
+		...binding,
+		listen_port: parseIntegerField(form, 'control_listen_port', 13301)
+	};
+}
+
+function parseP2pConfig(form: FormData): AgentP2pConfig {
+	const binding = parseBindingSelection(form, 'p2p');
+	return {
+		...binding,
+		kad: {
+			listen_port: parseIntegerField(form, 'p2p_kad_listen_port', 41000)
+		},
+		ed2k: {
+			listen_port: parseIntegerField(form, 'p2p_ed2k_listen_port', 41001)
+		}
+	};
+}
+
+function parseNatConfig(form: FormData): AgentNatConfig {
+	const backend = normalizeOptionalString(form.get('nat_p2p_backend'));
+	return {
+		p2p: {
+			enabled: form.get('nat_p2p_enabled') === 'on',
+			backend_order: backend ? [backend] : ['upnp'],
+			igd_ip: normalizeOptionalString(form.get('nat_p2p_igd_ip')),
+			discovery_timeout_secs: parseIntegerField(form, 'nat_p2p_discovery_timeout_secs', 5),
+			lease_duration_secs: parseIntegerField(form, 'nat_p2p_lease_duration_secs', 3600),
+			renew_margin_secs: parseIntegerField(form, 'nat_p2p_renew_margin_secs', 300),
+			external_ip_override: normalizeOptionalString(form.get('nat_p2p_external_ip_override'))
+		}
 	};
 }
 
@@ -75,8 +116,8 @@ export const POST: RequestHandler = async ({ params, request }) => {
 
 	const form = await request.formData();
 	config = {
-		control: parseBindingSelection(form, 'control'),
-		p2p: parseBindingSelection(form, 'p2p'),
+		control: parseControlConfig(form),
+		p2p: parseP2pConfig(form),
 		nat: parseNatConfig(form)
 	};
 	await applyAgentInterfaceSelection(indexerId, registration.protocol, config);

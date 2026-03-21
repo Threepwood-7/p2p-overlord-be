@@ -3,7 +3,6 @@ import type {
 	AgentNetworkingConfig,
 	ConfigUpdate,
 	InterfaceBindingReport,
-	InterfaceBindingSelection,
 	IndexerStats,
 	IndexerRegistration,
 	NatStatusSnapshot,
@@ -23,6 +22,12 @@ import {
 
 const AGENT_RESTART_WAIT_MESSAGE = 'waiting for agent restart';
 
+type BindingConfig = {
+	bind_iface: string | null;
+	bind_ip: string | null;
+	selection_confirmed: boolean;
+};
+
 async function fetchAgentStats(agent: IndexerRegistration): Promise<IndexerStats> {
 	const response = await fetch(`${agent.url}/api/internal/stats`);
 	if (!response.ok) {
@@ -32,10 +37,10 @@ async function fetchAgentStats(agent: IndexerRegistration): Promise<IndexerStats
 }
 
 function bindingSelectionMatchesReport(
-	selection: InterfaceBindingSelection,
+	selection: BindingConfig,
 	report: InterfaceBindingReport
 ): boolean {
-	if (selection.selected_interface_name !== report.selected_interface_name) {
+	if (selection.bind_iface !== report.bind_iface) {
 		return false;
 	}
 
@@ -47,7 +52,7 @@ function bindingSelectionMatchesReport(
 		return selection.bind_ip === report.resolved_bind_ip;
 	}
 
-	if (!selection.selected_interface_name) {
+	if (!selection.bind_iface) {
 		return report.resolved_bind_ip === null;
 	}
 
@@ -71,16 +76,22 @@ function networkingConfigChanged(
 ): boolean {
 	if (!previousReport) {
 		return Boolean(
-			config.control.selected_interface_name ||
+			config.control.bind_iface ||
+				config.control.listen_port !== 13301 ||
 				config.control.bind_ip ||
 				config.control.selection_confirmed ||
-				config.p2p.selected_interface_name ||
+				config.p2p.bind_iface ||
 				config.p2p.bind_ip ||
 				config.p2p.selection_confirmed ||
-				config.nat.enabled ||
-				config.nat.igd_ip ||
-				config.nat.external_ip_override ||
-				config.nat.backend_order.some((backend) => backend !== 'upnp')
+				config.p2p.kad.listen_port !== 41000 ||
+				config.p2p.ed2k.listen_port !== 41001 ||
+				config.nat.p2p.enabled ||
+				config.nat.p2p.igd_ip ||
+				config.nat.p2p.external_ip_override ||
+				config.nat.p2p.discovery_timeout_secs !== 5 ||
+				config.nat.p2p.lease_duration_secs !== 3600 ||
+				config.nat.p2p.renew_margin_secs !== 300 ||
+				config.nat.p2p.backend_order.some((backend) => backend !== 'upnp')
 		);
 	}
 
@@ -100,19 +111,19 @@ function natConfigMatchesStatus(
 		return false;
 	}
 
-	if (config.nat.enabled !== status.enabled) {
+	if (config.nat.p2p.enabled !== status.enabled) {
 		return false;
 	}
 
-	if (config.nat.igd_ip !== status.igd_ip) {
+	if (config.nat.p2p.igd_ip !== status.igd_ip) {
 		return false;
 	}
 
-	if (config.nat.external_ip_override !== status.external_ip_override) {
+	if (config.nat.p2p.external_ip_override !== status.external_ip_override) {
 		return false;
 	}
 
-	if (status.backend && !config.nat.backend_order.includes(status.backend)) {
+	if (status.backend && !config.nat.p2p.backend_order.includes(status.backend)) {
 		return false;
 	}
 
@@ -167,6 +178,7 @@ export async function applyAgentInterfaceSelection(
 		throw new Error(`unknown agent ${indexerId}`);
 	}
 
+	const previousConfig = getAgentNetworkingConfig(indexerId);
 	const previousReport = getAgentInterfaceReport(indexerId);
 	const previousNatStatus = getAgentNatStatus(indexerId);
 	updateAgentNetworkingConfig(indexerId, config);
@@ -193,7 +205,11 @@ export async function applyAgentInterfaceSelection(
 	try {
 		return await refreshAgentInterface(indexerId);
 	} catch (error) {
-		if (networkingConfigChanged(previousReport, previousNatStatus, config) && previousReport) {
+		if (
+			previousReport &&
+			(networkingConfigChanged(previousReport, previousNatStatus, config) ||
+				JSON.stringify(previousConfig) !== JSON.stringify(config))
+		) {
 			storeAgentInterfaceError(indexerId, AGENT_RESTART_WAIT_MESSAGE);
 			return previousReport;
 		}
