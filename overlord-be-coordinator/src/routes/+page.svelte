@@ -15,7 +15,7 @@
 	}
 
 	function desiredNatBackend(agent: AgentInterfacesView): string {
-		return agent.config.nat.p2p.backend_order[0] ?? 'upnp_rupnp';
+		return agent.config.nat.p2p.backend_order[0] ?? 'upnp_miniupnpc';
 	}
 
 	async function startSearch() {
@@ -218,13 +218,17 @@
 							<p>
 								NAT desired: {agent.config.nat.p2p.enabled ? 'enabled' : 'disabled'} · backend:
 								{desiredNatBackend(agent)} · IGD:
-								{agent.config.nat.p2p.igd_ip ?? 'auto'} · external IP:
+								{agent.config.nat.p2p.igd_ip ?? 'auto'} · minissdpd:
+								{agent.config.nat.p2p.minissdpd_socket ?? 'off'} · SSDP port:
+								{agent.config.nat.p2p.ssdp_local_port ?? 'auto'} · external IP:
 								{agent.config.nat.p2p.external_ip_override ?? 'auto'}
 							</p>
 							<p>
 								NAT live: {agent.nat?.enabled ? 'enabled' : 'disabled'} · backend:
 								{agent.nat?.backend ?? 'none'} · gateway:
-								{agent.nat?.gateway?.gateway_ip ?? 'none'} · external IP:
+								{agent.nat?.gateway?.gateway_ip ?? 'none'} · minissdpd:
+								{agent.nat?.minissdpd_socket ?? 'off'} · SSDP port:
+								{agent.nat?.ssdp_local_port ?? 'auto'} · external IP:
 								{agent.nat?.gateway?.external_ip ??
 									agent.nat?.observed_external_addresses?.[0] ??
 									'none'}
@@ -245,6 +249,12 @@
 							<label>
 								NAT backend
 								<select name="nat_p2p_backend">
+									<option
+										value="upnp_miniupnpc"
+										selected={desiredNatBackend(agent) === 'upnp_miniupnpc'}
+									>
+										upnp_miniupnpc
+									</option>
 									<option value="upnp_rupnp" selected={desiredNatBackend(agent) === 'upnp_rupnp'}>
 										upnp_rupnp
 									</option>
@@ -257,6 +267,22 @@
 							<label>
 								IGD IP override
 								<input name="nat_p2p_igd_ip" value={agent.config.nat.p2p.igd_ip ?? ''} />
+							</label>
+
+							<label>
+								MiniSSDPd socket
+								<input
+									name="nat_p2p_minissdpd_socket"
+									value={agent.config.nat.p2p.minissdpd_socket ?? ''}
+								/>
+							</label>
+
+							<label>
+								SSDP local port
+								<input
+									name="nat_p2p_ssdp_local_port"
+									value={agent.config.nat.p2p.ssdp_local_port ?? ''}
+								/>
 							</label>
 
 							<label>

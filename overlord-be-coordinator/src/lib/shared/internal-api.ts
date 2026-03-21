@@ -187,6 +187,8 @@ export type AgentNatP2pConfig = {
 	enabled: boolean;
 	backend_order: string[];
 	igd_ip: string | null;
+	minissdpd_socket: string | null;
+	ssdp_local_port: number | null;
 	discovery_timeout_secs: number;
 	lease_duration_secs: number;
 	renew_margin_secs: number;
@@ -226,6 +228,8 @@ export type NatStatusSnapshot = {
 	backend: string | null;
 	bind_ip: string | null;
 	igd_ip: string | null;
+	minissdpd_socket: string | null;
+	ssdp_local_port: number | null;
 	external_ip_override: string | null;
 	gateway: SelectedGateway | null;
 	mappings: MappedEndpoint[];

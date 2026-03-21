@@ -276,8 +276,10 @@ function createDefaultP2pConfig(): AgentP2pConfig {
 function createDefaultNatP2pConfig(): AgentNatP2pConfig {
 	return {
 		enabled: false,
-		backend_order: ['upnp_rupnp'],
+		backend_order: ['upnp_miniupnpc', 'upnp_rupnp'],
 		igd_ip: null,
+		minissdpd_socket: null,
+		ssdp_local_port: null,
 		discovery_timeout_secs: 5,
 		lease_duration_secs: 3600,
 		renew_margin_secs: 300,

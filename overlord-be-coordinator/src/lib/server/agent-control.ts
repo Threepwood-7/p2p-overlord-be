@@ -21,6 +21,7 @@ import {
 } from '$lib/server/state';
 
 const AGENT_RESTART_WAIT_MESSAGE = 'waiting for agent restart';
+const DEFAULT_NAT_BACKEND_ORDER = ['upnp_miniupnpc', 'upnp_rupnp'];
 
 type BindingConfig = {
 	bind_iface: string | null;
@@ -87,11 +88,13 @@ function networkingConfigChanged(
 				config.p2p.ed2k.listen_port !== 41001 ||
 				config.nat.p2p.enabled ||
 				config.nat.p2p.igd_ip ||
+				config.nat.p2p.minissdpd_socket ||
+				config.nat.p2p.ssdp_local_port !== null ||
 				config.nat.p2p.external_ip_override ||
 				config.nat.p2p.discovery_timeout_secs !== 5 ||
 				config.nat.p2p.lease_duration_secs !== 3600 ||
 				config.nat.p2p.renew_margin_secs !== 300 ||
-				config.nat.p2p.backend_order.some((backend) => backend !== 'upnp_rupnp')
+				!sameStringArray(config.nat.p2p.backend_order, DEFAULT_NAT_BACKEND_ORDER)
 		);
 	}
 
@@ -119,6 +122,14 @@ function natConfigMatchesStatus(
 		return false;
 	}
 
+	if (config.nat.p2p.minissdpd_socket !== status.minissdpd_socket) {
+		return false;
+	}
+
+	if (config.nat.p2p.ssdp_local_port !== status.ssdp_local_port) {
+		return false;
+	}
+
 	if (config.nat.p2p.external_ip_override !== status.external_ip_override) {
 		return false;
 	}
@@ -136,6 +147,10 @@ function networkingConfigMatchesRuntime(
 	status: NatStatusSnapshot | null
 ): boolean {
 	return selectionMatchesReport(config, report) && natConfigMatchesStatus(config, report, status);
+}
+
+function sameStringArray(left: string[], right: string[]): boolean {
+	return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export async function refreshAgentInterface(indexerId: string): Promise<AgentNetworkReport> {

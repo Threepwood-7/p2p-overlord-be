@@ -87,14 +87,29 @@ function parseNatConfig(form: FormData): AgentNatConfig {
 	return {
 		p2p: {
 			enabled: form.get('nat_p2p_enabled') === 'on',
-			backend_order: backend ? [backend] : ['upnp_rupnp'],
+			backend_order: backend ? [backend] : ['upnp_miniupnpc', 'upnp_rupnp'],
 			igd_ip: normalizeOptionalString(form.get('nat_p2p_igd_ip')),
+			minissdpd_socket: normalizeOptionalString(form.get('nat_p2p_minissdpd_socket')),
+			ssdp_local_port: parseOptionalIntegerField(form, 'nat_p2p_ssdp_local_port'),
 			discovery_timeout_secs: parseIntegerField(form, 'nat_p2p_discovery_timeout_secs', 5),
 			lease_duration_secs: parseIntegerField(form, 'nat_p2p_lease_duration_secs', 3600),
 			renew_margin_secs: parseIntegerField(form, 'nat_p2p_renew_margin_secs', 300),
 			external_ip_override: normalizeOptionalString(form.get('nat_p2p_external_ip_override'))
 		}
 	};
+}
+
+function parseOptionalIntegerField(form: FormData, name: string): number | null {
+	const raw = form.get(name);
+	if (typeof raw !== 'string') {
+		return null;
+	}
+	const trimmed = raw.trim();
+	if (!trimmed) {
+		return null;
+	}
+	const parsed = Number.parseInt(trimmed, 10);
+	return Number.isFinite(parsed) ? parsed : null;
 }
 
 export const POST: RequestHandler = async ({ params, request }) => {

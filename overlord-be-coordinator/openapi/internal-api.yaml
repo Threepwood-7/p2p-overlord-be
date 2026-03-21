@@ -430,6 +430,8 @@ components:
           enabled,
           backend_order,
           igd_ip,
+          minissdpd_socket,
+          ssdp_local_port,
           discovery_timeout_secs,
           lease_duration_secs,
           renew_margin_secs,
@@ -444,6 +446,12 @@ components:
             type: string
         igd_ip:
           type: string
+          nullable: true
+        minissdpd_socket:
+          type: string
+          nullable: true
+        ssdp_local_port:
+          type: integer
           nullable: true
         discovery_timeout_secs:
           type: integer
@@ -514,6 +522,8 @@ components:
           backend,
           bind_ip,
           igd_ip,
+          minissdpd_socket,
+          ssdp_local_port,
           external_ip_override,
           gateway,
           mappings,
@@ -534,6 +544,12 @@ components:
           nullable: true
         igd_ip:
           type: string
+          nullable: true
+        minissdpd_socket:
+          type: string
+          nullable: true
+        ssdp_local_port:
+          type: integer
           nullable: true
         external_ip_override:
           type: string
