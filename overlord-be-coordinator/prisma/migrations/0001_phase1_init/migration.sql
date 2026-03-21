@@ -77,13 +77,17 @@ CREATE TABLE search_results (
 
 CREATE TABLE snoop_entries (
     indexer_id TEXT NOT NULL,
-    query TEXT NOT NULL,
-    hash JSONB NULL,
+    logical_key TEXT NOT NULL,
+    family TEXT NOT NULL,
+    target TEXT NOT NULL,
+    start_position INTEGER NULL,
+    size BIGINT NULL,
+    restrictive_payload_hex TEXT NULL,
     hit_count INTEGER NOT NULL,
     first_seen TIMESTAMPTZ NOT NULL,
     last_seen TIMESTAMPTZ NOT NULL,
     last_drained_at TIMESTAMPTZ NULL,
-    PRIMARY KEY (indexer_id, query)
+    PRIMARY KEY (indexer_id, logical_key)
 );
 
 CREATE TABLE snoop_log (

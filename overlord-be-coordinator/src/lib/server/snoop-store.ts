@@ -1,42 +1,57 @@
-import { Prisma } from '@prisma/client';
-
 import { getDb } from '$lib/server/db';
-import type { HashType, SnoopEntry } from '$lib/shared/internal-api';
-
-function parseHash(value: Prisma.JsonValue | null): HashType | null {
-	if (!value || typeof value !== 'object' || Array.isArray(value)) {
-		return null;
-	}
-	const record = value as Record<string, unknown>;
-	if (record.kind === 'ed2k' && typeof record.value === 'string') {
-		return {
-			kind: 'ed2k',
-			value: record.value
-		};
-	}
-	return null;
-}
-
-function serializeHash(value: HashType | null): Prisma.InputJsonValue | Prisma.NullTypes.DbNull {
-	return value ? (value as Prisma.InputJsonValue) : Prisma.DbNull;
-}
+import type { SnoopEntry } from '$lib/shared/internal-api';
 
 function toSnoopEntry(entry: {
-	query: string;
-	hash: Prisma.JsonValue | null;
+	family: string;
+	logicalKey: string;
+	target: string;
+	startPosition: number | null;
+	size: bigint | null;
+	restrictivePayloadHex: string | null;
 	hitCount: number;
 	firstSeen: Date;
 	lastSeen: Date;
 	lastDrainedAt: Date | null;
 }): SnoopEntry {
-	return {
-		query: entry.query,
-		hash: parseHash(entry.hash),
-		hit_count: entry.hitCount,
-		first_seen: entry.firstSeen.toISOString(),
-		last_seen: entry.lastSeen.toISOString(),
-		last_drained_at: entry.lastDrainedAt?.toISOString() ?? null
-	};
+	switch (entry.family) {
+		case 'keyword':
+			return {
+				family: 'keyword',
+				logical_key: entry.logicalKey,
+				target: entry.target,
+				start_position: entry.startPosition ?? 0,
+				restrictive_payload_hex: entry.restrictivePayloadHex,
+				hit_count: entry.hitCount,
+				first_seen: entry.firstSeen.toISOString(),
+				last_seen: entry.lastSeen.toISOString(),
+				last_drained_at: entry.lastDrainedAt?.toISOString() ?? null
+			};
+		case 'source':
+			return {
+				family: 'source',
+				logical_key: entry.logicalKey,
+				target: entry.target,
+				start_position: entry.startPosition ?? 0,
+				size: Number(entry.size ?? 0n),
+				hit_count: entry.hitCount,
+				first_seen: entry.firstSeen.toISOString(),
+				last_seen: entry.lastSeen.toISOString(),
+				last_drained_at: entry.lastDrainedAt?.toISOString() ?? null
+			};
+		case 'notes':
+			return {
+				family: 'notes',
+				logical_key: entry.logicalKey,
+				target: entry.target,
+				size: Number(entry.size ?? 0n),
+				hit_count: entry.hitCount,
+				first_seen: entry.firstSeen.toISOString(),
+				last_seen: entry.lastSeen.toISOString(),
+				last_drained_at: entry.lastDrainedAt?.toISOString() ?? null
+			};
+		default:
+			throw new Error(`unsupported snoop entry family: ${entry.family}`);
+	}
 }
 
 /**
@@ -54,15 +69,52 @@ export async function storeSnoopEntries(indexerId: string, entries: SnoopEntry[]
 			return;
 		}
 		await tx.snoopEntry.createMany({
-			data: entries.map((entry) => ({
-				indexerId,
-				query: entry.query,
-				hash: serializeHash(entry.hash),
-				hitCount: entry.hit_count,
-				firstSeen: new Date(entry.first_seen),
-				lastSeen: new Date(entry.last_seen),
-				lastDrainedAt: entry.last_drained_at ? new Date(entry.last_drained_at) : null
-			}))
+			data: entries.map((entry) => {
+				switch (entry.family) {
+					case 'keyword':
+						return {
+							indexerId,
+							logicalKey: entry.logical_key,
+							family: entry.family,
+							target: entry.target,
+							startPosition: entry.start_position,
+							size: null,
+							restrictivePayloadHex: entry.restrictive_payload_hex,
+							hitCount: entry.hit_count,
+							firstSeen: new Date(entry.first_seen),
+							lastSeen: new Date(entry.last_seen),
+							lastDrainedAt: entry.last_drained_at ? new Date(entry.last_drained_at) : null
+						};
+					case 'source':
+						return {
+							indexerId,
+							logicalKey: entry.logical_key,
+							family: entry.family,
+							target: entry.target,
+							startPosition: entry.start_position,
+							size: BigInt(entry.size),
+							restrictivePayloadHex: null,
+							hitCount: entry.hit_count,
+							firstSeen: new Date(entry.first_seen),
+							lastSeen: new Date(entry.last_seen),
+							lastDrainedAt: entry.last_drained_at ? new Date(entry.last_drained_at) : null
+						};
+					case 'notes':
+						return {
+							indexerId,
+							logicalKey: entry.logical_key,
+							family: entry.family,
+							target: entry.target,
+							startPosition: null,
+							size: BigInt(entry.size),
+							restrictivePayloadHex: null,
+							hitCount: entry.hit_count,
+							firstSeen: new Date(entry.first_seen),
+							lastSeen: new Date(entry.last_seen),
+							lastDrainedAt: entry.last_drained_at ? new Date(entry.last_drained_at) : null
+						};
+				}
+			})
 		});
 	});
 }

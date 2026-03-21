@@ -263,14 +263,42 @@ export type ConfigUpdate = {
 	config: unknown;
 };
 
-export type SnoopEntry = {
-	query: string;
-	hash: HashType | null;
+export type KeywordSnoopEntry = {
+	family: 'keyword';
+	logical_key: string;
+	target: string;
+	start_position: number;
+	restrictive_payload_hex: string | null;
 	hit_count: number;
 	first_seen: string;
 	last_seen: string;
 	last_drained_at: string | null;
 };
+
+export type SourceSnoopEntry = {
+	family: 'source';
+	logical_key: string;
+	target: string;
+	start_position: number;
+	size: number;
+	hit_count: number;
+	first_seen: string;
+	last_seen: string;
+	last_drained_at: string | null;
+};
+
+export type NotesSnoopEntry = {
+	family: 'notes';
+	logical_key: string;
+	target: string;
+	size: number;
+	hit_count: number;
+	first_seen: string;
+	last_seen: string;
+	last_drained_at: string | null;
+};
+
+export type SnoopEntry = KeywordSnoopEntry | SourceSnoopEntry | NotesSnoopEntry;
 
 export type PopularHash = {
 	hash: HashType;

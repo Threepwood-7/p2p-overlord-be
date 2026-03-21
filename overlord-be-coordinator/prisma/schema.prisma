@@ -103,14 +103,18 @@ model SearchResult {
 
 model SnoopEntry {
   indexerId  String
-  query      String
-  hash       Json?
+  logicalKey String
+  family     String
+  target     String
+  startPosition Int?
+  size       BigInt?
+  restrictivePayloadHex String?
   hitCount   Int
   firstSeen  DateTime
   lastSeen   DateTime
   lastDrainedAt DateTime?
 
-  @@unique([indexerId, query])
+  @@unique([indexerId, logicalKey])
 }
 
 model SnoopLog {

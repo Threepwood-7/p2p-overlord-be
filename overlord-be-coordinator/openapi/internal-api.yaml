@@ -619,15 +619,82 @@ components:
           $ref: '#/components/schemas/Protocol'
         config: {}
     SnoopEntry:
+      oneOf:
+        - $ref: '#/components/schemas/KeywordSnoopEntry'
+        - $ref: '#/components/schemas/SourceSnoopEntry'
+        - $ref: '#/components/schemas/NotesSnoopEntry'
+    KeywordSnoopEntry:
       type: object
-      required: [query, hash, hit_count, first_seen, last_seen, last_drained_at]
+      required:
+        [family, logical_key, target, start_position, hit_count, first_seen, last_seen, last_drained_at]
       properties:
-        query:
+        family:
           type: string
-        hash:
-          allOf:
-            - $ref: '#/components/schemas/HashType'
+          enum: [keyword]
+        logical_key:
+          type: string
+        target:
+          type: string
+        start_position:
+          type: integer
+        restrictive_payload_hex:
+          type: string
           nullable: true
+        hit_count:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        last_drained_at:
+          type: string
+          format: date-time
+          nullable: true
+    SourceSnoopEntry:
+      type: object
+      required:
+        [family, logical_key, target, start_position, size, hit_count, first_seen, last_seen, last_drained_at]
+      properties:
+        family:
+          type: string
+          enum: [source]
+        logical_key:
+          type: string
+        target:
+          type: string
+        start_position:
+          type: integer
+        size:
+          type: integer
+          format: int64
+        hit_count:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        last_drained_at:
+          type: string
+          format: date-time
+          nullable: true
+    NotesSnoopEntry:
+      type: object
+      required: [family, logical_key, target, size, hit_count, first_seen, last_seen, last_drained_at]
+      properties:
+        family:
+          type: string
+          enum: [notes]
+        logical_key:
+          type: string
+        target:
+          type: string
+        size:
+          type: integer
+          format: int64
         hit_count:
           type: integer
         first_seen:
