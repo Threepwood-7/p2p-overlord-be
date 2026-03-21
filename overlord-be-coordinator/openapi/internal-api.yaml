@@ -472,16 +472,16 @@ components:
           $ref: '#/components/schemas/AgentNatConfig'
     SelectedGateway:
       type: object
-      required: [backend, control_url, local_addr, gateway_addr, external_ip]
+      required: [backend, control_url, local_ip, gateway_ip, external_ip]
       properties:
         backend:
           type: string
         control_url:
           type: string
-        local_addr:
+        local_ip:
           type: string
           nullable: true
-        gateway_addr:
+        gateway_ip:
           type: string
           nullable: true
         external_ip:

@@ -206,8 +206,8 @@ export type AgentNetworkingConfig = {
 export type SelectedGateway = {
 	backend: string;
 	control_url: string;
-	local_addr: string | null;
-	gateway_addr: string | null;
+	local_ip: string | null;
+	gateway_ip: string | null;
 	external_ip: string | null;
 };
 

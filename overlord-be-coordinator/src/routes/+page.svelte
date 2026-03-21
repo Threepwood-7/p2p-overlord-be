@@ -224,7 +224,7 @@
 							<p>
 								NAT live: {agent.nat?.enabled ? 'enabled' : 'disabled'} · backend:
 								{agent.nat?.backend ?? 'none'} · gateway:
-								{agent.nat?.gateway?.gateway_addr ?? 'none'} · external IP:
+								{agent.nat?.gateway?.gateway_ip ?? 'none'} · external IP:
 								{agent.nat?.gateway?.external_ip ??
 									agent.nat?.observed_external_addresses?.[0] ??
 									'none'}
