@@ -16,44 +16,54 @@ See [OVERLORD.md](OVERLORD.md) for the full specification.
 ## Architecture
 
 ```mermaid
-graph TD
+flowchart TD
     Browser["🌐 Browser"]
 
-    subgraph SVC001["SVC-001 · overlord-be-coordinator · :13300  ─  SvelteKit / Node.js"]
+    subgraph COORD["SVC-001 · overlord-be-coordinator · :13300  ·  SvelteKit / Node.js"]
+        direction TB
         UI["SSR Frontend"]
         API["REST + SSE API"]
         Dispatch["Job Dispatcher\nfan-out · round-robin · least-busy"]
         Dedup["Dedup Engine\ncross-protocol · cross-torrent"]
         DLM["Download Manager\nMetalink 4 / RFC 5854"]
-        DB[("PostgreSQL\nPrisma migrations")]
+        DB[("PostgreSQL · Prisma")]
+        UI <--> API
+        API <--> DB
+        API --> Dispatch
+        Dedup <--> DB
     end
 
-    subgraph SVC002["SVC-002 · overlord-agent-emule · :13301  ─  Rust"]
-        E["IndexerService"]
-        E_KAD["KAD crawler\n:41000 UDP"]
-        E_ED2K["ED2K client\n:41001 TCP"]
-        E_SQ["snoop queue"]
+    subgraph AGENTS["Rust Indexer Agents  ·  stateless  ·  only need OVERLORD_COORDINATOR_URL"]
+        direction TB
+
+        subgraph SVC002["SVC-002 · overlord-agent-emule · :13301"]
+            direction LR
+            E["IndexerService"] --> E_KAD["KAD crawler\n:41000 UDP"]
+            E --> E_ED2K["ED2K client\n:41001 TCP"]
+            E --> E_SQ["snoop queue"]
+        end
+
+        subgraph SVC003["SVC-003 · overlord-agent-mainline · :13302"]
+            direction LR
+            M["IndexerService"] --> M_DHT["BT DHT crawler\n:41002 UDP+TCP"]
+            M --> M_SQ["snoop queue"]
+        end
+
+        subgraph SVC004["SVC-004 · overlord-agent-gnutella · :13303"]
+            direction LR
+            G["IndexerService"] --> G_G2["Gnutella G2\n:41003 TCP"]
+            G --> G_SQ["snoop queue"]
+        end
+
+        subgraph SVC005["SVC-005 · overlord-agent-ipfs · :13304"]
+            direction LR
+            I["IndexerService"] --> I_LP["libp2p / IPFS\n:41004 TCP"]
+            I --> I_SQ["snoop queue"]
+        end
     end
 
-    subgraph SVC003["SVC-003 · overlord-agent-mainline · :13302  ─  Rust"]
-        M["IndexerService"]
-        M_DHT["BT DHT crawler\n:41002 UDP+TCP"]
-        M_SQ["snoop queue"]
-    end
-
-    subgraph SVC004["SVC-004 · overlord-agent-gnutella · :13303  ─  Rust"]
-        G["IndexerService"]
-        G_G2["Gnutella G2\n:41003 TCP"]
-        G_SQ["snoop queue"]
-    end
-
-    subgraph SVC005["SVC-005 · overlord-agent-ipfs · :13304  ─  Rust"]
-        I["IndexerService"]
-        I_LP["libp2p / IPFS\n:41004 TCP"]
-        I_SQ["snoop queue"]
-    end
-
-    subgraph Networks["P2P Networks  (passive crawl 24/7 + active search on demand + DHT seeding)"]
+    subgraph NETWORKS["P2P Networks  ·  passive crawl 24/7  ·  active search on demand  ·  DHT seeding"]
+        direction TB
         NET_E["eMule KAD / ED2K"]
         NET_B["BitTorrent DHT"]
         NET_G["Gnutella 2"]
@@ -61,57 +71,29 @@ graph TD
     end
 
     subgraph DLC["Download Clients"]
-        aria2["aria2\nJSON-RPC"]
-        qbt["qBittorrent\nHTTP API"]
+        direction LR
+        aria2["aria2  ·  JSON-RPC"]
+        qbt["qBittorrent  ·  HTTP API"]
     end
 
-    %% ── Browser → Coordinator ──────────────────────────────────────────────
-    Browser -->|"SSR pages  /  REST queries  /  SSE live feed"| UI
-    UI <--> API
-    API --- Dispatch
-    API --- Dedup
-    API --- DLM
-    Dedup <--> DB
-    API <--> DB
+    %% ── Browser ↔ Coordinator ───────────────────────────────────────────────
+    Browser -->|"SSR pages · REST queries · SSE live feed"| UI
 
     %% ── Coordinator → Agents  (commands) ───────────────────────────────────
-    Dispatch -->|"POST /search · /enrich · /config-update · /seed-popular"| E
-    Dispatch -->|"POST /search · /enrich · /config-update · /seed-popular"| M
-    Dispatch -->|"POST /search · /enrich · /config-update"| G
-    Dispatch -->|"POST /search · /enrich · /config-update"| I
+    Dispatch -->|"search · enrich · config-update · seed-popular"| E
+    Dispatch -->|"search · enrich · config-update · seed-popular"| M
+    Dispatch -->|"search · enrich · config-update"| G
+    Dispatch -->|"search · enrich · config-update"| I
 
     %% ── Agents → Coordinator  (results & control) ──────────────────────────
-    E  -->|"POST /api/internal/results  (ResultBatch)"| Dedup
-    E  -->|"POST /api/internal/enrich-result"| Dedup
-    E  -->|"POST /api/internal/register"| API
-    E_SQ -->|"POST /api/internal/snoop-flush"| API
-
-    M  -->|"POST /api/internal/results"| Dedup
-    M  -->|"POST /api/internal/enrich-result"| Dedup
-    M  -->|"POST /api/internal/register"| API
-    M_SQ -->|"POST /api/internal/snoop-flush"| API
-
-    G  -->|"POST /api/internal/results"| Dedup
-    G  -->|"POST /api/internal/register"| API
-    G_SQ -->|"POST /api/internal/snoop-flush"| API
-
-    I  -->|"POST /api/internal/results"| Dedup
-    I  -->|"POST /api/internal/register"| API
-    I_SQ -->|"POST /api/internal/snoop-flush"| API
-
-    %% ── Agent internals ─────────────────────────────────────────────────────
-    E <--> E_KAD
-    E <--> E_ED2K
-    E --> E_SQ
-
-    M <--> M_DHT
-    M --> M_SQ
-
-    G <--> G_G2
-    G --> G_SQ
-
-    I <--> I_LP
-    I --> I_SQ
+    E     -->|"results · enrich-result · register"| Dedup
+    E_SQ  -->|"snoop-flush"| API
+    M     -->|"results · enrich-result · register"| Dedup
+    M_SQ  -->|"snoop-flush"| API
+    G     -->|"results · register"| Dedup
+    G_SQ  -->|"snoop-flush"| API
+    I     -->|"results · register"| Dedup
+    I_SQ  -->|"snoop-flush"| API
 
     %% ── Agents ↔ P2P Networks ───────────────────────────────────────────────
     E_KAD  <--> NET_E
