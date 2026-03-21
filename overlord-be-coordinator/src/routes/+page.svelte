@@ -2,6 +2,8 @@
 	import type {
 		AgentInterfacesView,
 		InterfaceBindingSelection,
+		KadPublishObservability,
+		PublishBatchSummary,
 		SearchJobStatusView,
 		SnoopDashboardEntry
 	} from '$lib/shared/internal-api';
@@ -43,6 +45,20 @@
 			return 'pending';
 		}
 		return new Date(value).toLocaleString();
+	}
+
+	function formatSeedSource(value: KadPublishObservability['last_seed_source']): string {
+		if (!value) {
+			return 'pending';
+		}
+		return value.replaceAll('_', ' ');
+	}
+
+	function formatPublishBatch(summary: PublishBatchSummary | null): string {
+		if (!summary) {
+			return 'pending';
+		}
+		return `items=${summary.published_items} acked=${summary.acked_contacts}/${summary.attempted_contacts} failed=${summary.failed_contacts} timed_out=${summary.timed_out_contacts}`;
 	}
 
 	async function startSearch() {
@@ -221,6 +237,42 @@
 						</p>
 						{#if agent.last_error}
 							<p>Error: {agent.last_error}</p>
+						{/if}
+						{#if agent.publish_observability}
+							<p>
+								Last seed: {formatSeedSource(agent.publish_observability.last_seed_source)} ·
+								{formatTimestamp(agent.publish_observability.last_seed_at)}
+							</p>
+							<p>
+								Keyword publish: {formatPublishBatch(agent.publish_observability.latest_keyword_batch)}
+							</p>
+							<p>
+								Source publish: {formatPublishBatch(agent.publish_observability.latest_source_batch)}
+							</p>
+							<p>
+								Keyword totals: batches {agent.publish_observability.keyword_counters.batches} ·
+								acked {agent.publish_observability.keyword_counters.acked_contacts}/
+								{agent.publish_observability.keyword_counters.attempted_contacts} · failed
+								{agent.publish_observability.keyword_counters.failed_contacts} · timed out
+								{agent.publish_observability.keyword_counters.timed_out_contacts}
+							</p>
+							<p>
+								Source totals: batches {agent.publish_observability.source_counters.batches} ·
+								acked {agent.publish_observability.source_counters.acked_contacts}/
+								{agent.publish_observability.source_counters.attempted_contacts} · failed
+								{agent.publish_observability.source_counters.failed_contacts} · timed out
+								{agent.publish_observability.source_counters.timed_out_contacts}
+							</p>
+							{#if agent.publish_observability.log_file}
+								<p>
+									Log file: <code>{agent.publish_observability.log_file.path}</code> ·
+									rotation {agent.publish_observability.log_file.rotation} · keep
+									{agent.publish_observability.log_file.max_files} · last write
+									{formatTimestamp(agent.publish_observability.log_file.last_write_at)}
+								</p>
+							{/if}
+						{:else}
+							<p>Publish observability: pending.</p>
 						{/if}
 
 						<form

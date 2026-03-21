@@ -17,6 +17,7 @@ import {
 	storeAgentInterfaceError,
 	storeAgentInterfaceReport,
 	storeAgentNatStatus,
+	storeAgentPublishObservability,
 	updateAgentNetworkingConfig
 } from '$lib/server/state';
 
@@ -167,6 +168,7 @@ export async function refreshAgentInterface(indexerId: string): Promise<AgentNet
 		}
 		storeAgentInterfaceReport(indexerId, report);
 		storeAgentNatStatus(indexerId, stats.nat);
+		storeAgentPublishObservability(indexerId, stats.publish_observability);
 		const config = getAgentNetworkingConfig(indexerId);
 		if (!networkingConfigMatchesRuntime(config, report, stats.nat)) {
 			return applyAgentInterfaceSelection(indexerId, agent.protocol, config);

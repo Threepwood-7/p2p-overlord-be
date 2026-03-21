@@ -238,11 +238,55 @@ export type NatStatusSnapshot = {
 	last_error: string | null;
 };
 
+export type PublishSeedSource = 'coordinator' | 'synthetic_fallback' | 'manual_api';
+
+export type PublishBatchSummary = {
+	seed_source: PublishSeedSource;
+	published_items: number;
+	closest_contacts_considered: number;
+	attempted_contacts: number;
+	acked_contacts: number;
+	failed_contacts: number;
+	timed_out_contacts: number;
+	completed_at: string;
+	last_success_at: string | null;
+};
+
+export type PublishCounters = {
+	batches: number;
+	published_items: number;
+	closest_contacts_considered: number;
+	attempted_contacts: number;
+	acked_contacts: number;
+	failed_contacts: number;
+	timed_out_contacts: number;
+	last_batch_at: string | null;
+	last_success_at: string | null;
+};
+
+export type AgentLogFileStatus = {
+	path: string;
+	rotation: string;
+	max_files: number;
+	last_write_at: string | null;
+};
+
+export type KadPublishObservability = {
+	last_seed_source: PublishSeedSource | null;
+	last_seed_at: string | null;
+	latest_keyword_batch: PublishBatchSummary | null;
+	latest_source_batch: PublishBatchSummary | null;
+	keyword_counters: PublishCounters;
+	source_counters: PublishCounters;
+	log_file: AgentLogFileStatus | null;
+};
+
 export type AgentInterfacesView = {
 	registration: IndexerRegistration;
 	report: AgentNetworkReport | null;
 	config: AgentNetworkingConfig;
 	nat: NatStatusSnapshot | null;
+	publish_observability: KadPublishObservability | null;
 	last_error: string | null;
 };
 
@@ -256,6 +300,7 @@ export type IndexerStats = {
 	uptime_secs: number;
 	nat: NatStatusSnapshot | null;
 	interface_report: AgentNetworkReport | null;
+	publish_observability: KadPublishObservability | null;
 };
 
 export type ConfigUpdate = {
