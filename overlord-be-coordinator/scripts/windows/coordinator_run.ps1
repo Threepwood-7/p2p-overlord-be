@@ -11,7 +11,7 @@ offline, and then forwards control to either npm or a direct Node inspector laun
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('dev', 'build', 'preview', 'check', 'debug')]
+    [ValidateSet('dev', 'build', 'preview', 'check', 'debug', 'stop')]
     [string]$Command = 'dev',
 
     [int]$InspectPort = 9229,
@@ -78,8 +78,12 @@ function New-RunBanner {
 }
 
 function Write-RunBanner {
+    param(
+        [string[]]$Paths = @($script:Paths.MainLogFile, $script:Paths.StdoutLogFile, $script:Paths.StderrLogFile)
+    )
+
     $banner = New-RunBanner
-    foreach ($path in @($script:Paths.MainLogFile, $script:Paths.StdoutLogFile, $script:Paths.StderrLogFile)) {
+    foreach ($path in $Paths) {
         Append-LogLine -Path $path -Line ''
         Append-LogLine -Path $path -Line $banner
     }
@@ -369,7 +373,8 @@ function Wait-ForPortRelease {
 
     $deadline = [DateTimeOffset]::UtcNow.AddMilliseconds($TimeoutMs)
     while ([DateTimeOffset]::UtcNow -lt $deadline) {
-        if ((Get-ListeningProcessIds -LocalPort $LocalPort).Count -eq 0) {
+        $listeningPids = @(Get-ListeningProcessIds -LocalPort $LocalPort)
+        if ($listeningPids.Count -eq 0) {
             return
         }
 
@@ -397,6 +402,28 @@ function Stop-DanglingCoordinatorInstances {
     }
 
     Wait-ForPortRelease -LocalPort $LocalPort
+}
+
+function Stop-Coordinator {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$LocalPort
+    )
+
+    $listeningPids = @(Get-ListeningProcessIds -LocalPort $LocalPort)
+    if ($listeningPids.Count -eq 0) {
+        Write-Log "No coordinator instance is listening on port ${LocalPort}."
+        return 0
+    }
+
+    Write-Log "Stopping coordinator instance(s) on port ${LocalPort}: $($listeningPids -join ', ')"
+    foreach ($processId in $listeningPids) {
+        Stop-ProcessTreeHard -ProcessId $processId
+    }
+
+    Wait-ForPortRelease -LocalPort $LocalPort
+    Write-Log "Coordinator stopped on port ${LocalPort}."
+    return 0
 }
 
 function Invoke-NpmScript {
@@ -460,6 +487,13 @@ function Invoke-CoordinatorDebug {
 function Invoke-Main {
     Assert-Windows
     Ensure-LogLayout
+
+    if ($Command -eq 'stop') {
+        Write-RunBanner -Paths @($script:Paths.MainLogFile)
+        Write-Log "coordinator_run.ps1 starting command=$Command host=$ListenHost port=$Port"
+        return Stop-Coordinator -LocalPort $Port
+    }
+
     Write-RunBanner
     Write-Log "coordinator_run.ps1 starting command=$Command host=$ListenHost port=$Port"
     Ensure-CoordinatorLayout
