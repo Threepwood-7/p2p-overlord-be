@@ -1,4 +1,5 @@
 import { json, redirect, type RequestHandler } from '@sveltejs/kit';
+import type { Logger } from 'winston';
 
 import type {
 	AgentControlConfig,
@@ -9,9 +10,11 @@ import type {
 	Protocol
 } from '$lib/shared/internal-api';
 import { applyAgentInterfaceSelection } from '$lib/server/agent-control';
+import logger from '$lib/server/logger';
 import { getRegistration } from '$lib/server/state';
 
 const ANY_BIND_OPTION = '__any__';
+const log: Logger = logger.child({ module: 'routes/api/agents/interface-selection' });
 
 function normalizeOptionalString(value: FormDataEntryValue | null): string | null {
 	if (typeof value !== 'string') {
@@ -112,7 +115,7 @@ function parseOptionalIntegerField(form: FormData, name: string): number | null 
 	return Number.isFinite(parsed) ? parsed : null;
 }
 
-export const POST: RequestHandler = async ({ params, request }) => {
+export const POST: RequestHandler = async ({ params, request, locals }) => {
 	const indexerId = params.indexerId;
 	if (!indexerId) {
 		return json({ error: 'missing agent id' }, { status: 400 });
@@ -126,6 +129,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	let config: AgentNetworkingConfig;
 	if (contentType.includes('application/json')) {
 		config = (await request.json()) as AgentNetworkingConfig;
+		log.info('interface_selection_route_json', {
+			request_id: locals.requestId ?? null,
+			indexer_id: indexerId,
+			protocol: registration.protocol
+		});
 		return applySelection(indexerId, registration.protocol, config);
 	}
 
@@ -135,6 +143,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		p2p: parseP2pConfig(form),
 		nat: parseNatConfig(form)
 	};
+	log.info('interface_selection_route_form', {
+		request_id: locals.requestId ?? null,
+		indexer_id: indexerId,
+		protocol: registration.protocol
+	});
 	await applyAgentInterfaceSelection(indexerId, registration.protocol, config);
 	throw redirect(303, '/');
 };

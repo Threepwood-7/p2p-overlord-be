@@ -17,6 +17,11 @@ import type {
 	ResultBatch,
 	SearchJob
 } from '$lib/shared/internal-api';
+import type { Logger } from 'winston';
+
+import logger from '$lib/server/logger';
+
+const log: Logger = logger.child({ module: 'state' });
 
 type SearchDispatch = {
 	job: SearchJob;
@@ -79,6 +84,7 @@ export function registerIndexer(payload: RegisterRequest): IndexerRegistration {
 		...payload,
 		registered_at: new Date().toISOString()
 	};
+	const hadExistingConfig = coordinatorState.agentNetworkingConfigs.has(payload.indexer_id);
 	const existingConfig =
 		coordinatorState.agentNetworkingConfigs.get(payload.indexer_id) ?? createEmptyConfig();
 	const existingReport = coordinatorState.agentInterfaceReports.get(payload.indexer_id) ?? null;
@@ -95,6 +101,15 @@ export function registerIndexer(payload: RegisterRequest): IndexerRegistration {
 		existingPublishObservability
 	);
 	coordinatorState.agentInterfaceErrors.set(payload.indexer_id, existingError);
+	log.info('state_register_indexer', {
+		indexer_id: payload.indexer_id,
+		protocol: payload.protocol,
+		url: payload.url,
+		hostname: payload.hostname,
+		had_existing_config: hadExistingConfig,
+		had_existing_report: existingReport !== null,
+		had_existing_nat_status: existingNatStatus !== null
+	});
 	return registered;
 }
 
@@ -159,12 +174,31 @@ export function storeAgentInterfaceReport(indexerId: string, report: AgentNetwor
 	coordinatorState.agentInterfaceReports.set(indexerId, report);
 	const natStatus = coordinatorState.agentNatStatuses.get(indexerId) ?? null;
 	coordinatorState.agentInterfaceErrors.set(indexerId, firstNonNullError(report, natStatus));
+	log.debug('state_store_interface_report', {
+		indexer_id: indexerId,
+		control_ready: report.control.ready,
+		control_state: report.control.state,
+		control_bind_iface: report.control.bind_iface,
+		control_resolved_bind_ip: report.control.resolved_bind_ip,
+		p2p_ready: report.p2p.ready,
+		p2p_state: report.p2p.state,
+		p2p_bind_iface: report.p2p.bind_iface,
+		p2p_resolved_bind_ip: report.p2p.resolved_bind_ip
+	});
 }
 
 export function storeAgentNatStatus(indexerId: string, status: NatStatusSnapshot | null): void {
 	coordinatorState.agentNatStatuses.set(indexerId, status);
 	const report = coordinatorState.agentInterfaceReports.get(indexerId) ?? null;
 	coordinatorState.agentInterfaceErrors.set(indexerId, firstNonNullError(report, status));
+	log.debug('state_store_nat_status', {
+		indexer_id: indexerId,
+		enabled: status?.enabled ?? null,
+		backend: status?.backend ?? null,
+		bind_ip: status?.bind_ip ?? null,
+		external_ip: status?.gateway?.external_ip ?? null,
+		mapping_count: status?.mappings.length ?? 0
+	});
 }
 
 export function storeAgentPublishObservability(
@@ -176,6 +210,10 @@ export function storeAgentPublishObservability(
 
 export function storeAgentInterfaceError(indexerId: string, error: string): void {
 	coordinatorState.agentInterfaceErrors.set(indexerId, error);
+	log.warn('state_store_interface_error', {
+		indexer_id: indexerId,
+		error
+	});
 }
 
 export function updateAgentNetworkingConfig(
@@ -183,6 +221,20 @@ export function updateAgentNetworkingConfig(
 	config: AgentNetworkingConfig
 ): void {
 	coordinatorState.agentNetworkingConfigs.set(indexerId, config);
+	log.info('state_update_networking_config', {
+		indexer_id: indexerId,
+		control_bind_iface: config.control.bind_iface,
+		control_bind_ip: config.control.bind_ip,
+		control_selection_confirmed: config.control.selection_confirmed,
+		control_listen_port: config.control.listen_port,
+		p2p_bind_iface: config.p2p.bind_iface,
+		p2p_bind_ip: config.p2p.bind_ip,
+		p2p_selection_confirmed: config.p2p.selection_confirmed,
+		kad_listen_port: config.p2p.kad.listen_port,
+		ed2k_listen_port: config.p2p.ed2k.listen_port,
+		nat_enabled: config.nat.p2p.enabled,
+		nat_backend_order: config.nat.p2p.backend_order
+	});
 }
 
 export function getAgentNetworkingConfig(indexerId: string): AgentNetworkingConfig {
