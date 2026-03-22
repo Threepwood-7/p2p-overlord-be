@@ -6,6 +6,8 @@ Starts or checks the coordinator from a Windows-first PowerShell entry point.
 This helper validates the coordinator layout, force-kills any stale listener on the
 coordinator port before `dev`, `preview`, or `debug`, warns when PostgreSQL looks
 offline, and then forwards control to either npm or a direct Node inspector launch.
+Pass `-RunDetached` to relaunch this helper in a minimized background PowerShell 7
+window and return immediately.
 #>
 
 [CmdletBinding()]
@@ -20,11 +22,17 @@ param(
 
     [int]$Port = 13300,
 
-    [string[]]$CoordinatorArgs = @()
+    [string[]]$CoordinatorArgs = @(),
+
+    [switch]$RunDetached
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$script:InvocationBoundParameters = @{}
+foreach ($entry in $PSBoundParameters.GetEnumerator()) {
+    $script:InvocationBoundParameters[$entry.Key] = $entry.Value
+}
 
 $script:WorkspaceProjectDir = if ([string]::IsNullOrWhiteSpace($env:OVERLORD_PROJECT_DIR)) {
     [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\..'))
@@ -145,6 +153,79 @@ function Resolve-CommandPath {
     }
 
     return $command.Source
+}
+
+function Resolve-Pwsh7Path {
+    $programFiles = if ([string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        'C:\Program Files'
+    }
+    else {
+        $env:ProgramFiles
+    }
+
+    $preferredPath = Join-Path $programFiles 'PowerShell\7\pwsh.exe'
+    if (Test-Path -LiteralPath $preferredPath -PathType Leaf) {
+        return $preferredPath
+    }
+
+    $pwshCommand = Get-Command -Name 'pwsh.exe' -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -ne $pwshCommand -and -not [string]::IsNullOrWhiteSpace($pwshCommand.Source)) {
+        return $pwshCommand.Source
+    }
+
+    Fail 'PowerShell 7 `pwsh.exe` was not found. Install PowerShell 7 and retry.'
+}
+
+function Get-DetachedInvocationArguments {
+    # Build a deterministic argument list and intentionally omit -RunDetached to
+    # prevent recursive relaunch loops.
+    $forwardedArgs = @($Command)
+
+    if ($script:InvocationBoundParameters.ContainsKey('InspectPort')) {
+        $forwardedArgs += '-InspectPort'
+        $forwardedArgs += [string]$InspectPort
+    }
+
+    if ($script:InvocationBoundParameters.ContainsKey('ListenHost')) {
+        $forwardedArgs += '-ListenHost'
+        $forwardedArgs += $ListenHost
+    }
+
+    if ($script:InvocationBoundParameters.ContainsKey('Port')) {
+        $forwardedArgs += '-Port'
+        $forwardedArgs += [string]$Port
+    }
+
+    if ($script:InvocationBoundParameters.ContainsKey('CoordinatorArgs') -and $CoordinatorArgs.Count -gt 0) {
+        $forwardedArgs += '-CoordinatorArgs'
+        $forwardedArgs += $CoordinatorArgs
+    }
+
+    return $forwardedArgs
+}
+
+function Start-DetachedSelf {
+    $pwshPath = Resolve-Pwsh7Path
+    $scriptPath = [System.IO.Path]::GetFullPath($PSCommandPath)
+    $argumentList = @('-NoLogo', '-NoProfile', '-File', $scriptPath)
+    $argumentList += @(Get-DetachedInvocationArguments)
+
+    $detachedProcess = Start-Process `
+        -FilePath $pwshPath `
+        -ArgumentList $argumentList `
+        -WorkingDirectory (Get-Location).Path `
+        -WindowStyle Minimized `
+        -PassThru
+
+    try {
+        Write-Log "Detached coordinator helper started as PID $($detachedProcess.Id)."
+    }
+    finally {
+        $detachedProcess.Dispose()
+    }
+
+    return 0
 }
 
 function Format-CmdArgument {
@@ -544,6 +625,10 @@ function Invoke-CoordinatorDebug {
 function Invoke-Main {
     Assert-Windows
     Ensure-WorkspaceLayout
+
+    if ($RunDetached.IsPresent) {
+        return Start-DetachedSelf
+    }
 
     if ($Command -eq 'stop') {
         Write-RunBanner -Paths @($script:Paths.MainLogFile)
