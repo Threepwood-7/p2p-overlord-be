@@ -12,6 +12,37 @@ import { spawn, spawnSync } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const OVERLORD_PROJECT_DIR_ENV = 'OVERLORD_PROJECT_DIR';
+const OVERLORD_TMP_DIR_ENV = 'OVERLORD_TMP_DIR';
+const DEFAULT_WORKSPACE_TMP_DIR_NAME = 'p2p-overlord';
+
+function readEnvPath(name) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return null;
+  }
+
+  return path.resolve(value);
+}
+
+/**
+ * Resolves the checked-out workspace root for repo-relative helper paths.
+ */
+export function resolveWorkspaceProjectDir() {
+  return readEnvPath(OVERLORD_PROJECT_DIR_ENV) ?? path.resolve(__dirname, '..', '..', '..', '..');
+}
+
+/**
+ * Resolves the shared workspace temp root used by local Windows helpers.
+ */
+export function resolveWorkspaceTmpDir() {
+  return readEnvPath(OVERLORD_TMP_DIR_ENV) ?? path.resolve(os.tmpdir(), DEFAULT_WORKSPACE_TMP_DIR_NAME);
+}
+
+const workspaceProjectDir = resolveWorkspaceProjectDir();
+const workspaceTmpDir = resolveWorkspaceTmpDir();
+const runtimeDir = path.join(workspaceTmpDir, 'overlord-be-db', 'runtime');
+const coordinatorDir = path.join(workspaceProjectDir, 'overlord-be', 'overlord-be-coordinator');
 
 export const DEFAULTS = {
   host: '127.0.0.1',
@@ -31,18 +62,20 @@ export const DEFAULTS = {
 
 export const PATHS = {
   helperDir: __dirname,
-  runtimeDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime'),
-  downloadsDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'downloads'),
-  postgresInstallDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres'),
-  dataDir: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'data'),
-  logFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.log'),
-  pidFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres.pid'),
-  downloadArchive: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'downloads', DEFAULTS.postgresZipFileName),
-  taskXmlFile: path.join('c:\\tmp', 'p2p-overlord', 'overlord-be-db', 'runtime', 'postgres-start-task.xml'),
-  coordinatorDir: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator'),
-  coordinatorEnvFile: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator', '.env'),
-  prismaSchemaFile: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator', 'prisma', 'schema.prisma'),
-  prismaCliFile: path.resolve(__dirname, '..', '..', '..', 'overlord-be-coordinator', 'node_modules', 'prisma', 'build', 'index.js')
+  workspaceProjectDir,
+  workspaceTmpDir,
+  runtimeDir,
+  downloadsDir: path.join(runtimeDir, 'downloads'),
+  postgresInstallDir: path.join(runtimeDir, 'postgres'),
+  dataDir: path.join(runtimeDir, 'data'),
+  logFile: path.join(runtimeDir, 'postgres.log'),
+  pidFile: path.join(runtimeDir, 'postgres.pid'),
+  downloadArchive: path.join(runtimeDir, 'downloads', DEFAULTS.postgresZipFileName),
+  taskXmlFile: path.join(runtimeDir, 'postgres-start-task.xml'),
+  coordinatorDir,
+  coordinatorEnvFile: path.join(coordinatorDir, '.env'),
+  prismaSchemaFile: path.join(coordinatorDir, 'prisma', 'schema.prisma'),
+  prismaCliFile: path.join(coordinatorDir, 'node_modules', 'prisma', 'build', 'index.js')
 };
 
 const REQUIRED_BINARIES = [

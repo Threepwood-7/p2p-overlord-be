@@ -81,7 +81,7 @@ node overlord-be/overlord-be-db/scripts/windows/db_run.mjs status
 
 ## Runtime Layout
 
-- Managed runtime: `c:\tmp\p2p-overlord\overlord-be-db\runtime`
+- Default managed runtime: `%TEMP%\p2p-overlord\overlord-be-db\runtime`
 - Managed database endpoint: `postgresql://overlord:overlord@127.0.0.1:5432/overlord`
 - PostgreSQL listen address: `0.0.0.0:5432`
 
@@ -89,3 +89,5 @@ node overlord-be/overlord-be-db/scripts/windows/db_run.mjs status
 
 - This helper is Windows-only in the current phase.
 - Prisma migrations are not treated as stable history in this phase; setup uses the current schema state.
+- `OVERLORD_PROJECT_DIR` overrides the workspace root used to locate `overlord-be-coordinator`.
+- `OVERLORD_TMP_DIR` overrides the shared workspace temp root used for the managed runtime layout.
