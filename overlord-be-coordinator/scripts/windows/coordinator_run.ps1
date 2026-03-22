@@ -34,11 +34,13 @@ $script:Paths = @{
     EnvFile        = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\.env'))
     ViteBin        = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\node_modules\vite\bin\vite.js'))
     LogDir         = 'c:\tmp\p2p-overlord'
+    TempCmdFile    = 'c:\tmp\p2p-overlord\coordinator_run_instance.cmd'
     StdoutLogFile  = 'c:\tmp\p2p-overlord\coordinator_stdout.log'
     StderrLogFile  = 'c:\tmp\p2p-overlord\coordinator_stderr.log'
     MainLogFile    = 'c:\tmp\p2p-overlord\coordinator_main.log'
 }
 $script:LogEncoding = [System.Text.UTF8Encoding]::new($false)
+$script:CmdEncoding = [System.Text.UTF8Encoding]::new($false)
 $script:MainLogLock = New-Object object
 
 function Ensure-LogLayout {
@@ -128,10 +130,18 @@ function Format-CmdArgument {
         [string]$Value
     )
 
+    if ([string]::IsNullOrEmpty($Value)) {
+        return '""'
+    }
+
+    if ($Value -notmatch '[\s"&|<>()^]') {
+        return $Value
+    }
+
     return '"' + $Value.Replace('"', '""') + '"'
 }
 
-function Build-CmdInvocation {
+function Build-CmdCommandLine {
     param(
         [Parameter(Mandatory = $true)]
         [string]$FilePath,
@@ -140,27 +150,46 @@ function Build-CmdInvocation {
     )
 
     $segments = @()
-    $segments += 'set "NO_COLOR=1"'
-    $segments += '&&'
-    $segments += 'set "FORCE_COLOR=0"'
-    $segments += '&&'
-    $segments += 'set "npm_config_color=false"'
-    $segments += '&&'
-    $segments += 'set "TERM=dumb"'
-    $segments += '&&'
     if ($FilePath.EndsWith('.cmd', [System.StringComparison]::OrdinalIgnoreCase) -or
         $FilePath.EndsWith('.bat', [System.StringComparison]::OrdinalIgnoreCase)) {
-        $segments += 'call'
+        $segments += 'CALL'
     }
 
     $segments += (Format-CmdArgument -Value $FilePath)
     foreach ($argument in $Arguments) {
         $segments += (Format-CmdArgument -Value $argument)
     }
-    $segments += '1>>' + (Format-CmdArgument -Value $script:Paths.StdoutLogFile)
-    $segments += '2>>' + (Format-CmdArgument -Value $script:Paths.StderrLogFile)
 
     return $segments -join ' '
+}
+
+function Write-TempCommandWrapper {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$Arguments = @()
+    )
+
+    Ensure-LogLayout
+
+    $wrapperLines = @(
+        '@ECHO OFF',
+        'SET "NO_COLOR=1"',
+        'SET "FORCE_COLOR=0"',
+        'SET "npm_config_color=false"',
+        'SET "TERM=dumb"',
+        (Build-CmdCommandLine -FilePath $FilePath -Arguments $Arguments)
+    )
+
+    $wrapperContents = ($wrapperLines -join "`r`n") + "`r`n"
+    [System.IO.File]::WriteAllText(
+        $script:Paths.TempCmdFile,
+        $wrapperContents,
+        $script:CmdEncoding
+    )
+
+    return $script:Paths.TempCmdFile
 }
 
 function Invoke-LoggedProcess {
@@ -181,11 +210,16 @@ function Invoke-LoggedProcess {
     Write-Log "Launching $DisplayName"
 
     $process = $null
-    $commandLine = Build-CmdInvocation -FilePath $FilePath -Arguments $Arguments
+    $wrapperPath = Write-TempCommandWrapper -FilePath $FilePath -Arguments $Arguments
+    $commandLine = @(
+        (Format-CmdArgument -Value $wrapperPath),
+        '1>>' + (Format-CmdArgument -Value $script:Paths.StdoutLogFile),
+        '2>>' + (Format-CmdArgument -Value $script:Paths.StderrLogFile)
+    ) -join ' '
     try {
         $process = Start-Process `
             -FilePath $script:CmdPath `
-            -ArgumentList @('/d', '/s', '/c', $commandLine) `
+            -ArgumentList @('/c', $commandLine) `
             -WorkingDirectory $WorkingDirectory `
             -PassThru `
             -Wait
