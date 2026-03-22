@@ -3,7 +3,8 @@ import { dirname } from 'node:path';
 
 import { createLogger, format, transports, type Logger } from 'winston';
 
-const COORDINATOR_SERVER_LOG_PATH = 'c:\\tmp\\p2p-overlord\\coordinator_server.log';
+import { resolveCoordinatorServerLogPath } from '$lib/server/paths';
+
 const COORDINATOR_SERVER_LOG_MAX_BYTES = 10 * 1024 * 1024;
 const COORDINATOR_SERVER_LOG_MAX_FILES = 10;
 
@@ -49,7 +50,8 @@ function normalizeValue(value: unknown): unknown {
 }
 
 function buildCoordinatorLogger(): Logger {
-	mkdirSync(dirname(COORDINATOR_SERVER_LOG_PATH), { recursive: true });
+	const coordinatorServerLogPath = resolveCoordinatorServerLogPath();
+	mkdirSync(dirname(coordinatorServerLogPath), { recursive: true });
 
 	return createLogger({
 		level: 'debug',
@@ -69,7 +71,7 @@ function buildCoordinatorLogger(): Logger {
 		),
 		transports: [
 			new transports.File({
-				filename: COORDINATOR_SERVER_LOG_PATH,
+				filename: coordinatorServerLogPath,
 				maxsize: COORDINATOR_SERVER_LOG_MAX_BYTES,
 				maxFiles: COORDINATOR_SERVER_LOG_MAX_FILES,
 				tailable: true
@@ -83,11 +85,12 @@ function getCoordinatorLogger(): Logger {
 	globalThis.__overlordCoordinatorLogger ??= buildCoordinatorLogger();
 
 	if (!globalThis.__overlordCoordinatorLoggerInitialized) {
+		const coordinatorServerLogPath = resolveCoordinatorServerLogPath();
 		globalThis.__overlordCoordinatorLoggerInitialized = true;
 		globalThis.__overlordCoordinatorLogger.info({
 			message: 'coordinator_logger_initialized',
 			event: 'coordinator_logger_initialized',
-			path: COORDINATOR_SERVER_LOG_PATH,
+			path: coordinatorServerLogPath,
 			max_bytes: COORDINATOR_SERVER_LOG_MAX_BYTES,
 			max_files: COORDINATOR_SERVER_LOG_MAX_FILES,
 			rotation: 'size_tailable'
@@ -108,5 +111,5 @@ export { coordinatorLogger };
  * Exposes the fixed coordinator server log path for diagnostics and tests.
  */
 export function getCoordinatorServerLogPath(): string {
-	return COORDINATOR_SERVER_LOG_PATH;
+	return resolveCoordinatorServerLogPath();
 }

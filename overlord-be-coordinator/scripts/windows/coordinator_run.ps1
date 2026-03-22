@@ -26,26 +26,49 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$script:WorkspaceProjectDir = if ([string]::IsNullOrWhiteSpace($env:OVERLORD_PROJECT_DIR)) {
+    [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\..'))
+}
+else {
+    [System.IO.Path]::GetFullPath($env:OVERLORD_PROJECT_DIR)
+}
+$script:CoordinatorDir = [System.IO.Path]::GetFullPath(
+    (Join-Path $script:WorkspaceProjectDir 'overlord-be\overlord-be-coordinator')
+)
+$script:WorkspaceTmpDir = if ([string]::IsNullOrWhiteSpace($env:OVERLORD_TMP_DIR)) {
+    [System.IO.Path]::GetFullPath((Join-Path ([System.IO.Path]::GetTempPath()) 'p2p-overlord'))
+}
+else {
+    [System.IO.Path]::GetFullPath($env:OVERLORD_TMP_DIR)
+}
+$script:WorkspaceLogDir = if ([string]::IsNullOrWhiteSpace($env:OVERLORD_LOG_DIR)) {
+    $script:WorkspaceTmpDir
+}
+else {
+    [System.IO.Path]::GetFullPath($env:OVERLORD_LOG_DIR)
+}
 $script:TaskkillPath = Join-Path ($env:SystemRoot ?? 'C:\Windows') 'System32\taskkill.exe'
 $script:CmdPath = Join-Path ($env:SystemRoot ?? 'C:\Windows') 'System32\cmd.exe'
 $script:Paths = @{
-    CoordinatorDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-    PackageJson    = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\package.json'))
-    EnvFile        = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\.env'))
-    ViteBin        = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\node_modules\vite\bin\vite.js'))
-    LogDir         = 'c:\tmp\p2p-overlord'
-    TempCmdFile    = 'c:\tmp\p2p-overlord\coordinator_run_instance.cmd'
-    StdoutLogFile  = 'c:\tmp\p2p-overlord\coordinator_stdout.log'
-    StderrLogFile  = 'c:\tmp\p2p-overlord\coordinator_stderr.log'
-    MainLogFile    = 'c:\tmp\p2p-overlord\coordinator_main.log'
+    CoordinatorDir = $script:CoordinatorDir
+    PackageJson    = Join-Path $script:CoordinatorDir 'package.json'
+    EnvFile        = Join-Path $script:CoordinatorDir '.env'
+    ViteBin        = Join-Path $script:CoordinatorDir 'node_modules\vite\bin\vite.js'
+    LogDir         = $script:WorkspaceLogDir
+    TempCmdFile    = Join-Path $script:WorkspaceTmpDir 'coordinator_run_instance.cmd'
+    StdoutLogFile  = Join-Path $script:WorkspaceLogDir 'coordinator_stdout.log'
+    StderrLogFile  = Join-Path $script:WorkspaceLogDir 'coordinator_stderr.log'
+    MainLogFile    = Join-Path $script:WorkspaceLogDir 'coordinator_main.log'
 }
 $script:LogEncoding = [System.Text.UTF8Encoding]::new($false)
 $script:CmdEncoding = [System.Text.UTF8Encoding]::new($false)
 $script:MainLogLock = New-Object object
 
-function Ensure-LogLayout {
-    if (-not (Test-Path -LiteralPath $script:Paths.LogDir -PathType Container)) {
-        New-Item -ItemType Directory -Path $script:Paths.LogDir -Force | Out-Null
+function Ensure-WorkspaceLayout {
+    foreach ($directory in @($script:WorkspaceTmpDir, $script:Paths.LogDir)) {
+        if (-not (Test-Path -LiteralPath $directory -PathType Container)) {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        }
     }
 }
 
@@ -59,7 +82,7 @@ function Append-LogLine {
         [string]$Line
     )
 
-    Ensure-LogLayout
+    Ensure-WorkspaceLayout
     [System.IO.File]::AppendAllText(
         $Path,
         $Line + [System.Environment]::NewLine,
@@ -171,7 +194,7 @@ function Write-TempCommandWrapper {
         [string[]]$Arguments = @()
     )
 
-    Ensure-LogLayout
+    Ensure-WorkspaceLayout
 
     $wrapperLines = @(
         '@ECHO OFF',
@@ -206,7 +229,7 @@ function Invoke-LoggedProcess {
         [string]$WorkingDirectory
     )
 
-    Ensure-LogLayout
+    Ensure-WorkspaceLayout
     Write-Log "Launching $DisplayName"
 
     $process = $null
@@ -520,7 +543,7 @@ function Invoke-CoordinatorDebug {
 
 function Invoke-Main {
     Assert-Windows
-    Ensure-LogLayout
+    Ensure-WorkspaceLayout
 
     if ($Command -eq 'stop') {
         Write-RunBanner -Paths @($script:Paths.MainLogFile)
