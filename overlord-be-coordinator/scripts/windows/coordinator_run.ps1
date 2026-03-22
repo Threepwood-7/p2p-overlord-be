@@ -136,6 +136,14 @@ function Build-CmdInvocation {
     )
 
     $segments = @()
+    $segments += 'set "NO_COLOR=1"'
+    $segments += '&&'
+    $segments += 'set "FORCE_COLOR=0"'
+    $segments += '&&'
+    $segments += 'set "npm_config_color=false"'
+    $segments += '&&'
+    $segments += 'set "TERM=dumb"'
+    $segments += '&&'
     if ($FilePath.EndsWith('.cmd', [System.StringComparison]::OrdinalIgnoreCase) -or
         $FilePath.EndsWith('.bat', [System.StringComparison]::OrdinalIgnoreCase)) {
         $segments += 'call'
