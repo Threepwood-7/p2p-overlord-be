@@ -9,7 +9,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 13300",
     "check": "node ./node_modules/@sveltejs/kit/svelte-kit.js sync && node ./node_modules/svelte-check/bin/svelte-check --tsconfig ./tsconfig.json",
     "prisma:generate": "prisma generate",
-    "windows:run": "node ./scripts/windows/coordinator_run.mjs"
+    "windows:run": "call \"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoProfile -File .\\scripts\\windows\\coordinator_run.ps1",
+    "windows:debug": "call \"%ProgramFiles%\\PowerShell\\7\\pwsh.exe\" -NoLogo -NoProfile -File .\\scripts\\windows\\coordinator_run.ps1 debug"
   },
   "devDependencies": {
     "@sveltejs/adapter-auto": "^6.1.0",

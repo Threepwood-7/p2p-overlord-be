@@ -2,4 +2,4 @@
 
 CD /D %~dp0
 
-NODE.EXE coordinator_run.mjs
+"%ProgramFiles%\PowerShell\7\pwsh.exe" -NoLogo -NoProfile -File coordinator_run.ps1 %*
