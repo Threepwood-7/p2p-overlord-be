@@ -16,7 +16,7 @@ param(
 
     [int]$InspectPort = 9229,
 
-    [string]$Host = '0.0.0.0',
+    [string]$ListenHost = '0.0.0.0',
 
     [int]$Port = 13300,
 
@@ -27,11 +27,62 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $script:TaskkillPath = Join-Path ($env:SystemRoot ?? 'C:\Windows') 'System32\taskkill.exe'
+$script:CmdPath = Join-Path ($env:SystemRoot ?? 'C:\Windows') 'System32\cmd.exe'
 $script:Paths = @{
     CoordinatorDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
     PackageJson    = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\package.json'))
     EnvFile        = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\.env'))
     ViteBin        = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\node_modules\vite\bin\vite.js'))
+    LogDir         = 'c:\tmp\p2p-overlord'
+    StdoutLogFile  = 'c:\tmp\p2p-overlord\coordinator_stdout.log'
+    StderrLogFile  = 'c:\tmp\p2p-overlord\coordinator_stderr.log'
+    MainLogFile    = 'c:\tmp\p2p-overlord\coordinator_main.log'
+}
+$script:LogEncoding = [System.Text.UTF8Encoding]::new($false)
+$script:MainLogLock = New-Object object
+
+function Ensure-LogLayout {
+    if (-not (Test-Path -LiteralPath $script:Paths.LogDir -PathType Container)) {
+        New-Item -ItemType Directory -Path $script:Paths.LogDir -Force | Out-Null
+    }
+}
+
+function Append-LogLine {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
+        [string]$Line
+    )
+
+    Ensure-LogLayout
+    [System.IO.File]::AppendAllText(
+        $Path,
+        $Line + [System.Environment]::NewLine,
+        $script:LogEncoding
+    )
+}
+
+function New-RunBanner {
+    $timestamp = Get-Date -Format o
+    $arguments = if ($CoordinatorArgs.Count -gt 0) {
+        $CoordinatorArgs -join ' '
+    }
+    else {
+        '(none)'
+    }
+
+    return "==== coordinator run timestamp=$timestamp command=$Command host=$ListenHost port=$Port cwd=$($script:Paths.CoordinatorDir) extra_args=$arguments ===="
+}
+
+function Write-RunBanner {
+    $banner = New-RunBanner
+    foreach ($path in @($script:Paths.MainLogFile, $script:Paths.StdoutLogFile, $script:Paths.StderrLogFile)) {
+        Append-LogLine -Path $path -Line ''
+        Append-LogLine -Path $path -Line $banner
+    }
 }
 
 function Write-Log {
@@ -40,7 +91,106 @@ function Write-Log {
         [string]$Message
     )
 
-    [Console]::Out.WriteLine($Message)
+    $timestampedMessage = "$(Get-Date -Format o) $Message"
+    [Console]::Out.WriteLine($timestampedMessage)
+
+    [System.Threading.Monitor]::Enter($script:MainLogLock)
+    try {
+        Append-LogLine -Path $script:Paths.MainLogFile -Line $timestampedMessage
+    }
+    finally {
+        [System.Threading.Monitor]::Exit($script:MainLogLock)
+    }
+}
+
+function Resolve-CommandPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$CommandName
+    )
+
+    $command = Get-Command -Name $CommandName -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $command -or [string]::IsNullOrWhiteSpace($command.Source)) {
+        Fail "Unable to resolve executable path for $CommandName"
+    }
+
+    return $command.Source
+}
+
+function Format-CmdArgument {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    return '"' + $Value.Replace('"', '""') + '"'
+}
+
+function Build-CmdInvocation {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$Arguments = @()
+    )
+
+    $segments = @()
+    if ($FilePath.EndsWith('.cmd', [System.StringComparison]::OrdinalIgnoreCase) -or
+        $FilePath.EndsWith('.bat', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $segments += 'call'
+    }
+
+    $segments += (Format-CmdArgument -Value $FilePath)
+    foreach ($argument in $Arguments) {
+        $segments += (Format-CmdArgument -Value $argument)
+    }
+    $segments += '1>>' + (Format-CmdArgument -Value $script:Paths.StdoutLogFile)
+    $segments += '2>>' + (Format-CmdArgument -Value $script:Paths.StderrLogFile)
+
+    return $segments -join ' '
+}
+
+function Invoke-LoggedProcess {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$DisplayName,
+
+        [string[]]$Arguments = @(),
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory
+    )
+
+    Ensure-LogLayout
+    Write-Log "Launching $DisplayName"
+
+    $process = $null
+    $commandLine = Build-CmdInvocation -FilePath $FilePath -Arguments $Arguments
+    try {
+        $process = Start-Process `
+            -FilePath $script:CmdPath `
+            -ArgumentList @('/d', '/s', '/c', $commandLine) `
+            -WorkingDirectory $WorkingDirectory `
+            -PassThru `
+            -Wait
+
+        $exitCode = $process.ExitCode
+        Write-Log "$DisplayName exited with code $exitCode"
+        return $exitCode
+    }
+    catch {
+        Write-Log "$DisplayName failed before returning an exit code: $($_.Exception.Message)"
+        throw
+    }
+    finally {
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
+    }
 }
 
 function Fail {
@@ -255,14 +405,11 @@ function Invoke-NpmScript {
         $npmArgs += $PassthroughArgs
     }
 
-    Push-Location -LiteralPath $script:Paths.CoordinatorDir
-    try {
-        & npm @npmArgs
-        return $LASTEXITCODE
-    }
-    finally {
-        Pop-Location
-    }
+    return Invoke-LoggedProcess `
+        -FilePath (Resolve-CommandPath -CommandName 'npm.cmd') `
+        -DisplayName "npm $NpmCommand" `
+        -Arguments $npmArgs `
+        -WorkingDirectory $script:Paths.CoordinatorDir
 }
 
 function Invoke-CoordinatorDebug {
@@ -295,18 +442,18 @@ function Invoke-CoordinatorDebug {
         $nodeArgs += $AdditionalArgs
     }
 
-    Push-Location -LiteralPath $script:Paths.CoordinatorDir
-    try {
-        & node @nodeArgs
-        return $LASTEXITCODE
-    }
-    finally {
-        Pop-Location
-    }
+    return Invoke-LoggedProcess `
+        -FilePath (Resolve-CommandPath -CommandName 'node.exe') `
+        -DisplayName 'node vite debug' `
+        -Arguments $nodeArgs `
+        -WorkingDirectory $script:Paths.CoordinatorDir
 }
 
 function Invoke-Main {
     Assert-Windows
+    Ensure-LogLayout
+    Write-RunBanner
+    Write-Log "coordinator_run.ps1 starting command=$Command host=$ListenHost port=$Port"
     Ensure-CoordinatorLayout
 
     if ($Command -in @('dev', 'preview', 'debug')) {
@@ -317,7 +464,7 @@ function Invoke-Main {
     if ($Command -eq 'debug') {
         return Invoke-CoordinatorDebug `
             -InspectorPort $InspectPort `
-            -ListenHost $Host `
+            -ListenHost $ListenHost `
             -ListenPort $Port `
             -AdditionalArgs $CoordinatorArgs
     }
@@ -329,6 +476,7 @@ try {
     exit (Invoke-Main)
 }
 catch {
+    Write-Log "coordinator_run.ps1 failed: $($_.Exception.Message)"
     [Console]::Error.WriteLine($_.Exception.Message)
     exit 1
 }
